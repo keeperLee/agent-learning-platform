@@ -68,7 +68,7 @@ const { DIAGRAM_NAMES } = await import(pathToFileURL(P('assets/js/diagrams.js'))
 const DEMO_NAMES = new Set(Object.keys(DEMOS));
 const DIAGRAM_SET = new Set(DIAGRAM_NAMES);
 const CALLOUT_TYPES = new Set(['tip', 'info', 'warn', 'danger', 'key', 'quote']);
-const TAGS = new Set(['basic', 'mid', 'adv', 'lab']);
+const TAGS = new Set(['basic', 'mid', 'adv', 'lab', 'ref']);
 const TEXT_LANGS = new Set(['text', 'markdown', 'md', 'plain', 'txt', 'html', 'xml', 'css', 'diff', 'log', 'ini', 'toml']);
 
 /* ============================================================

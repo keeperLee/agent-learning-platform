@@ -1,6 +1,6 @@
 # Agent 学习平台
 
-一个**纯静态、零依赖、可直接部署到 GitHub Pages** 的网页阅读版 AI Agent 学习平台。涵盖 Agent 的基础概念、核心原理、架构设计与实战案例，共 21 章。
+一个**纯静态、零依赖、可直接部署到 GitHub Pages** 的网页阅读版 AI Agent 学习平台。涵盖 Agent 的基础概念、核心原理、架构设计与实战案例，共 24 章，另附延伸阅读资源清单、术语表与高频问题 FAQ。
 
 ---
 
@@ -65,6 +65,7 @@ npx --yes serve -p 5173 .
 | --- | --- |
 | `npm run dev` | 启动本地服务器（零依赖，跨平台） |
 | `npm run validate` | 运行内容与结构校验（CI 用的同一个脚本） |
+| `npm run check-links` | 检查全部外链可用性（需要网络，不参与 CI） |
 
 > 修改内容后刷新浏览器即可生效，无需构建。**提交前建议先跑一次 `npm run validate`**，与 CI 结果一致。
 
@@ -107,7 +108,7 @@ git push  →  CI（校验）  →  通过  →  Build（打包）  →  Deploy�
 | 目录 | 章节 id 唯一、`tag` / `minutes` 合法、`title` / `summary` 非空 |
 | 阅读路径 | 路径引用的章节 id 全部存在，无空数组误写 |
 | 内容 | catalog 与 `content/chapters/*.md` 双向一致（无缺失、无孤儿文件） |
-| 渲染 | 21 章全部渲染成功；无残留 `:::`、无未解析围栏 / 粗体、TOC 非空 |
+| 渲染 | 全部章节渲染成功；无残留 `:::`、无未解析围栏 / 粗体、TOC 非空 |
 | 语法 | `::: demo / diagram / callout` 名称合法；容器开闭配对；代码块语言可识别 |
 | 资源 | `index.html`、`:::figure`、图片语法引用的本地文件是否都存在 |
 | 挂载点 | 脚本依赖的 8 个 DOM 挂载点齐备 |
@@ -181,6 +182,7 @@ CI 中还包含 **JS 语法检查**（`node --check`）与 **HTTP 冒烟测试**
 │   └── deploy-pages.yml           # CD：validate → build → deploy
 ├── scripts/
 │   ├── validate.mjs               # 内容与结构校验（复用站点渲染器）
+│   ├── check-links.mjs            # 外链可用性检查（需网络，手动运行）
 │   └── serve.mjs                  # 零依赖本地静态服务器
 ├── assets/
 │   ├── css/
@@ -201,7 +203,7 @@ CI 中还包含 **JS 语法检查**（`node --check`）与 **HTTP 冒烟测试**
 └── content/
     ├── catalog.js                 # 课程目录配置（模块 / 章节 / 阅读路径）
     └── chapters/
-        ├── c01.md … c21.md        # 21 章正文
+        ├── c01.md … c24.md        # 24 章正文
 ```
 
 ---

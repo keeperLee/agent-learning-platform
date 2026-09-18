@@ -14,6 +14,7 @@
     "start": "node scripts/serve.mjs",
     "validate": "node scripts/validate.mjs",
     "test": "node scripts/validate.mjs",
+    "check-links": "node scripts/check-links.mjs",
     "predeploy-check": "node scripts/validate.mjs"
   }
 }

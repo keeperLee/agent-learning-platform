@@ -304,6 +304,7 @@ html[data-theme="dark"] .ico-sun { display: none; }
 .nav-item .n-tag.t-mid { background: var(--info-soft); color: var(--info); }
 .nav-item .n-tag.t-adv { background: var(--warn-soft); color: var(--warn); }
 .nav-item .n-tag.t-lab { background: var(--accent-soft); color: var(--accent); }
+.nav-item .n-tag.t-ref { background: var(--surface-3); color: var(--text-3); }
 .nav-item.is-locked { opacity: .48; }
 
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; border: 1.5px solid var(--border-strong); }

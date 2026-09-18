@@ -16,7 +16,7 @@ window.CATALOG = {
       name: '全部',
       emoji: '📚',
       level: '完整课程',
-      desc: '完整课程体系，共 21 章，涵盖从概念到生产落地的全部内容。',
+      desc: '完整课程体系，共 24 章，涵盖从概念到生产落地的全部内容，另附参考资源、术语表与 FAQ。',
       chapters: null
     },
     {
@@ -40,7 +40,7 @@ window.CATALOG = {
       name: '实战',
       emoji: '🎯',
       level: '工程化 · 完整课程',
-      desc: '面向工程落地：框架选型、RAG、评估体系、安全护栏，以及五个行业实战案例与动手实验。',
+      desc: '面向工程落地：框架选型、RAG、评估体系、安全护栏，五个行业实战案例、动手实验，以及参考资源与术语表。',
       chapters: null
     }
   ],
@@ -177,6 +177,28 @@ window.CATALOG = {
           id: 'c21', tag: 'lab', minutes: 25,
           title: '动手实验：从零实现最小可用 Agent',
           summary: '只用标准库实现一个具备工具调用与循环控制的 Agent，约 150 行代码。'
+        }
+      ]
+    },
+    {
+      id: 'm5',
+      name: '第五部分 · 附录与参考',
+      desc: '查阅型内容，不需要顺序阅读',
+      chapters: [
+        {
+          id: 'c22', tag: 'ref', minutes: 16,
+          title: '延伸阅读与参考资源',
+          summary: '官方文档、经典论文、开源项目、评测基准与优质长文，逐条标注其解决的问题与对应章节。'
+        },
+        {
+          id: 'c23', tag: 'ref', minutes: 14,
+          title: '术语表',
+          summary: '60 余个中英对照术语，按主题归类，含一句话定义与易混概念辨析。'
+        },
+        {
+          id: 'c24', tag: 'ref', minutes: 18,
+          title: '高频问题 FAQ',
+          summary: '20 个实际项目中最常卡住的问题，每题给明确判断依据而非「视情况而定」。'
         }
       ]
     }

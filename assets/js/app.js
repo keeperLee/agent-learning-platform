@@ -11,7 +11,7 @@ import { initSearch, buildIndex } from './search.js';
 import { initAnnotate, applyHighlights } from './annotate.js';
 
 const CAT = window.CATALOG;
-const TAG_LABEL = { basic: '基础', mid: '核心', adv: '架构', lab: '实验' };
+const TAG_LABEL = { basic: '基础', mid: '核心', adv: '架构', lab: '实验', ref: '参考' };
 
 let currentChapterId = null;
 let currentToc = [];
