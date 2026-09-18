@@ -1,0 +1,19 @@
+{
+  "name": "agent-learning-platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "网页阅读版 AI Agent 学习平台：结构化课程 + 交互式演示 + 学习进度/笔记/搜索",
+  "keywords": ["agent", "llm", "documentation", "static-site", "github-pages"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "validate": "node scripts/validate.mjs",
+    "test": "node scripts/validate.mjs",
+    "predeploy-check": "node scripts/validate.mjs"
+  }
+}

@@ -1,0 +1,109 @@
+name: CI
+
+# 每次推送与 PR 都会运行。校验不通过时不会部署，线上保持上一个可用版本。
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: 内容与结构校验
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 环境信息
+        run: node --version
+
+      # 1) JS 语法检查（零依赖，秒级反馈）
+      - name: JS 语法检查
+        run: |
+          fail=0
+          for f in assets/js/*.js scripts/*.mjs content/catalog.js; do
+            if out=$(node --check "$f" 2>&1); then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ $f"
+              echo "$out"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      # 2) 内容校验：目录一致性 / Markdown 渲染 / 资源引用 / 容器配对 / 演示与示意图名称
+      - name: 内容与结构校验
+        run: node scripts/validate.mjs
+
+      # 3) 冒烟测试：启动真实服务，逐个断言关键资源
+      - name: HTTP 冒烟测试
+        run: |
+          set -e
+          BASE=http://127.0.0.1:5173
+
+          nohup node scripts/serve.mjs 5173 > /tmp/serve.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null "$BASE/index.html"; then ready=1; break; fi
+            sleep 0.5
+          done
+          if [ "$ready" != "1" ]; then
+            echo "服务启动超时，输出日志："
+            cat /tmp/serve.log
+            exit 1
+          fi
+          echo "  ✓ 本地服务已就绪"
+
+          check() {
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$1")
+            [ "$code" = "200" ] || { echo "  ✗ $1 → HTTP $code"; exit 1; }
+            echo "  ✓ $1"
+          }
+          check /index.html
+          check /assets/css/main.css
+          check /assets/js/app.js
+          check /content/catalog.js
+          check /content/chapters/c01.md
+          check /content/chapters/c21.md
+
+          # 章节 Markdown 必须以原始文本提供，不能被处理成 HTML
+          ct=$(curl -s -o /dev/null -w '%{content_type}' "$BASE/content/chapters/c01.md")
+          echo "  · c01.md Content-Type = $ct"
+          case "$ct" in
+            text/html*) echo "  ✗ Markdown 被当作 HTML 返回（请检查 .nojekyll）"; exit 1 ;;
+          esac
+
+          # 首页必须包含脚本依赖的挂载点
+          page=$(curl -s "$BASE/index.html")
+          for id in viewRoot chapterNav tocInner searchInput drawerBody selectionBar toastWrap; do
+            echo "$page" | grep -q "id=\"$id\"" || { echo "  ✗ index.html 缺少挂载点 #$id"; exit 1; }
+          done
+          echo "  ✓ 关键挂载点齐备"
+
+      # 4) 部署产物检查
+      - name: 检查 Pages 部署产物
+        run: |
+          set -e
+          test -f .nojekyll || { echo "✗ 缺少 .nojekyll"; exit 1; }
+          test -f index.html || { echo "✗ 缺少 index.html"; exit 1; }
+          test -d content/chapters || { echo "✗ 缺少章节目录"; exit 1; }
+          echo "  ✓ 部署产物就绪"
