@@ -51,6 +51,13 @@ if (!BROWSER) {
   process.exit(2);
 }
 
+// 全局 WebSocket 自 Node 22 起才提供；低版本直接跳过，避免硬失败
+if (typeof WebSocket === 'undefined') {
+  console.log(paint(`\n  当前 Node ${process.version} 不提供全局 WebSocket（需要 Node ≥ 22），跳过浏览器交互测试。`, C.yellow));
+  console.log(paint('  可升级 Node 后重试；其余检查不受影响。\n', C.dim));
+  process.exit(2);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const chrome = spawn(BROWSER, [

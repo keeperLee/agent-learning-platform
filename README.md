@@ -66,9 +66,11 @@ npx --yes serve -p 5173 .
 | `npm run dev` | 启动本地服务器（零依赖，跨平台） |
 | `npm run validate` | 运行内容与结构校验（CI 用的同一个脚本） |
 | `npm run check-links` | 检查全部外链可用性（需要网络，不参与 CI） |
-| `npm run e2e` | 浏览器交互回归测试（需先启动服务，用 `--base` 指定地址） |
+| `npm run e2e` | 浏览器交互回归测试（需 Node ≥ 22 与本地浏览器，先启动服务后用 `--base` 指定地址） |
 
 > 修改内容后刷新浏览器即可生效，无需构建。**提交前建议先跑一次 `npm run validate`**，与 CI 结果一致。
+
+各脚本的 Node 版本要求：`dev` / `validate` / `check-links` 需要 Node ≥ 18；`e2e` 因为要用全局 `WebSocket` 驱动 CDP，需要 Node ≥ 22（低版本会自动跳过并返回码 2，不会报错中断）。
 
 ### 快捷键
 

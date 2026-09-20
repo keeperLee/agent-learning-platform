@@ -27,7 +27,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # 需要 Node ≥ 22：scripts/e2e.mjs 依赖全局 WebSocket 驱动 CDP
+          node-version: '22'
 
       - name: 环境信息
         run: node --version
