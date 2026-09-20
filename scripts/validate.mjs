@@ -101,6 +101,15 @@ for (const m of CAT.modules) {
 
     if (c.title && c.title.length > 30) warn('目录', `${where} 标题偏长（${c.title.length} 字），侧边栏可能换行`);
     if (c.summary && c.summary.length > 60) warn('目录', `${where} 摘要偏长（${c.summary.length} 字），卡片会显得拥挤`);
+
+    // 内容时效性：updated 为信息基准时间，volatile 标记快速变化的章节
+    const updated = c.updated || CAT.DEFAULT_UPDATED;
+    if (!/^\d{4}-\d{2}(-\d{2})?$/.test(String(updated))) {
+      fail('目录', `${where} 的 updated 格式非法：${updated}（应为 YYYY-MM 或 YYYY-MM-DD）`);
+    }
+    if (c.volatile !== undefined && typeof c.volatile !== 'boolean') {
+      fail('目录', `${where} 的 volatile 必须是布尔值`);
+    }
   }
 }
 ok('目录', `${CAT.modules.length} 个模块 / ${chapters.length} 个章节，id 唯一且字段合法`);
@@ -143,6 +152,10 @@ ok('内容', `${files.length} 个章节文件与目录一致`);
    ============================================================ */
 const stats = [];
 let totalIssues = 0;
+const tocIds = new Map();   // chapterId -> Set(该章所有标题锚点)
+const links = [];           // { from, target } 章节之间的引用
+
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch (_) { return String(s); } };
 
 function checkAssetPath(src, scope) {
   if (!src) return;
@@ -248,10 +261,35 @@ for (const c of chapters) {
   if (h2 < 3) warn(scope, `二级标题只有 ${h2} 个，结构可能不够清晰`);
   if (plain.length > 8000) warn(scope, `正文偏长（${plain.length} 字），建议拆分`);
 
+  /* 4.7 收集锚点与内链，待全部章节渲染完成后统一校验 */
+  tocIds.set(c.id, new Set(toc.map((t) => t.id)));
+  for (const m of md.matchAll(/\]\(#([^)\s]*)\)/g)) links.push({ from: c.id, target: m[1] });
+
   stats.push({ id: c.id, title: c.title, plain: plain.length, h2, toc: toc.length, blocks: blockNames.length, html: html.length });
 }
 
 ok('渲染', `${stats.length} 章全部渲染成功（均无残留语法标记）`);
+
+/* 4.8 章节内链校验：指向的章节与锚点必须真实存在 */
+let linkCount = 0;
+for (const { from, target } of links) {
+  if (!target || target === '/') continue;              // 首页
+  linkCount++;
+  if (target.startsWith('/chapter/')) {
+    const [cid, rawAnchor] = target.slice('/chapter/'.length).split('#');
+    if (!ids.has(cid)) { fail(from, `内链指向不存在的章节：#/chapter/${cid}`); continue; }
+    if (rawAnchor) {
+      const anchor = safeDecode(rawAnchor);
+      const set = tocIds.get(cid);
+      if (set && !set.has(anchor)) fail(from, `内链锚点在目标章节中不存在：#/chapter/${cid}#${anchor}`);
+    }
+  } else {
+    const anchor = safeDecode(target);
+    const set = tocIds.get(from);
+    if (set && !set.has(anchor)) fail(from, `页内锚点不存在：#${anchor}`);
+  }
+}
+ok('内链', `${linkCount} 处章节引用全部指向存在的章节与锚点`);
 
 /* ============================================================
    5. index.html 资源引用
@@ -273,7 +311,8 @@ ok('index.html', `${refs.size} 个本地资源引用全部有效`);
 const MOUNTS = [
   'viewRoot', 'chapterNav', 'tocInner', 'searchInput', 'drawerBody',
   'selectionBar', 'toastWrap', 'readingProgress',
-  'changelogOverlay', 'changelogBody', 'changelogToggle', 'versionText'
+  'changelogOverlay', 'changelogBody', 'changelogToggle', 'versionText',
+  'readerBtn', 'readerPanel', 'readerBody'
 ];
 for (const id of MOUNTS) {
   if (!indexHtml.includes(`id="${id}"`)) fail('index.html', `缺少脚本依赖的挂载点 #${id}`);
@@ -335,6 +374,12 @@ if (!CL || !Array.isArray(CL.entries) || CL.entries.length === 0) {
   }
 
   ok('更新日志', `${CL.entries.length} 个版本（当前 ${CL.current}），版本号与 catalog 一致`);
+}
+
+/* 时效性标注概览 */
+{
+  const volatile = chapters.filter((c) => c.volatile);
+  ok('时效性', `基准时间 ${CAT.DEFAULT_UPDATED}，其中 ${volatile.length} 章标记为快速变化：${volatile.map((c) => c.id).join('、') || '无'}`);
 }
 
 /* ============================================================

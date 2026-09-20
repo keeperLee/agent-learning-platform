@@ -50,6 +50,10 @@
         <span class="badge-count" id="notesBadge" hidden>0</span>
       </button>
 
+      <button class="icon-btn" id="readerBtn" aria-label="阅读设置" title="阅读设置（字号 / 行距 / 版心）" aria-expanded="false">
+        <span class="reader-icon" aria-hidden="true">Aa</span>
+      </button>
+
       <button class="icon-btn" id="themeToggle" aria-label="切换深色模式" title="切换浅色 / 深色模式">
         <svg class="ico-sun" viewBox="0 0 24 24" width="19" height="19" fill="none"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
         <svg class="ico-moon" viewBox="0 0 24 24" width="19" height="19" fill="none"><path d="M20 13.6A8.2 8.2 0 0 1 10.4 4 8.2 8.2 0 1 0 20 13.6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
@@ -126,6 +130,19 @@
       <div class="drawer-body" id="drawerBody"></div>
     </div>
   </div>
+
+  <!-- 阅读设置面板 -->
+  <div class="reader-panel" id="readerPanel" hidden role="dialog" aria-label="阅读设置">
+    <div class="rp-head">
+      <span>阅读设置</span>
+      <button class="icon-btn" data-reader-close aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="rp-body" id="readerBody"></div>
+    <div class="rp-foot"><button class="btn btn-sm btn-ghost" data-reader-reset type="button">恢复默认</button></div>
+  </div>
+  <div class="reader-scrim" id="readerScrim" hidden></div>
 
   <!-- 更新日志 -->
   <div class="overlay" id="changelogOverlay" hidden>

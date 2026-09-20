@@ -298,6 +298,8 @@ async function renderChapter(id, anchor) {
         <span>⏱ 约 ${meta.minutes} 分钟</span>
         <span>·</span>
         <span>第 ${idx + 1} / ${all.length} 章</span>
+        <span>·</span>
+        <span title="本章内容的信息基准时间">更新于 ${esc(meta.updated)}</span>
         ${p.state === 'done' ? '<span class="pill pill-ok">已完成</span>' : p.pct ? `<span class="pill pill-warn">进度 ${p.pct}%</span>` : ''}
       </div>
       <div class="article-actions">
@@ -306,7 +308,7 @@ async function renderChapter(id, anchor) {
         <button class="btn btn-sm" type="button" data-mark-done>${p.state === 'done' ? '↺ 取消完成' : '✓ 标记完成'}</button>
       </div>
     </header>
-    <div class="article-body" id="articleBody">${html}</div>
+    <div class="article-body" id="articleBody">${volatilityNotice(meta)}${html}</div>
     <footer class="article-footer">
       <div class="af-done">
         <button class="btn ${p.state === 'done' ? '' : 'btn-primary'}" type="button" data-mark-done>${p.state === 'done' ? '↺ 取消「已完成」' : '✓ 我已完成本章'}</button>
@@ -347,6 +349,17 @@ async function renderChapter(id, anchor) {
     window.scrollTo(0, 0);
   }
   updateReadingProgress();
+}
+
+/** 快速变化的章节自动加一条时效提醒（由 catalog 的 volatile 字段驱动） */
+function volatilityNotice(meta) {
+  if (!meta.volatile) return '';
+  return `<div class="callout warn" style="margin:0 0 26px">
+  <span class="co-icon" aria-hidden="true">⏳</span>
+  <div class="co-body"><div class="co-title">本章包含快速变化的内容</div>
+  模型能力、框架与价格可能在数月内变化。本章的信息基准时间为 <b>${esc(meta.updated)}</b>，
+  阅读时请留意时效，关键结论建议以官方文档为准。</div>
+</div>`;
 }
 
 function renderToc(toc) {
@@ -448,6 +461,72 @@ function refreshBookmarkBtn() {
   const marked = store.isBookmarked(currentChapterId, '');
   btn.classList.toggle('is-on', marked);
   btn.textContent = marked ? '★ 已收藏' : '☆ 收藏本章';
+}
+
+/* ============================================================
+   阅读设置（字号 / 行距 / 版心 / 字体）
+   ============================================================ */
+const READER_OPTS = {
+  scale: {
+    label: '正文字号',
+    values: [['sm', '小', 15], ['md', '中', 16.2], ['lg', '大', 17.6], ['xl', '特大', 19]],
+    fallback: 1
+  },
+  leading: {
+    label: '行距',
+    values: [['tight', '紧凑', 1.7], ['normal', '标准', 1.86], ['loose', '宽松', 2.05]],
+    fallback: 1
+  },
+  width: {
+    label: '版心宽度',
+    values: [['narrow', '窄', 680], ['normal', '标准', 780], ['wide', '宽', 920]],
+    fallback: 1
+  },
+  font: {
+    label: '正文字体',
+    values: [['sans', '无衬线', 'sans'], ['serif', '衬线', 'serif']],
+    fallback: 0
+  }
+};
+
+const READER_VARS = { scale: '--reader-fs', leading: '--reader-lh', width: '--reader-max' };
+
+function applyReader() {
+  const pref = store.getState().reader || {};
+  const root = document.documentElement;
+  for (const key of ['scale', 'leading', 'width']) {
+    const cfg = READER_OPTS[key];
+    const hit = cfg.values.find((v) => v[0] === pref[key]) || cfg.values[cfg.fallback];
+    const unit = key === 'leading' ? '' : 'px';
+    root.style.setProperty(READER_VARS[key], `${hit[2]}${unit}`);
+  }
+  const font = READER_OPTS.font.values.find((v) => v[0] === pref.font) || READER_OPTS.font.values[0];
+  root.dataset.readerFont = font[2];
+}
+
+function renderReaderPanel() {
+  const pref = store.getState().reader || {};
+  $('#readerBody').innerHTML = Object.entries(READER_OPTS).map(([key, cfg]) => `
+    <div class="rp-row">
+      <span class="rp-label">${esc(cfg.label)}</span>
+      <div class="rp-opts">
+        ${cfg.values.map(([value, label]) =>
+    `<button type="button" data-rk="${key}" data-rv="${value}" class="${pref[key] === value ? 'is-on' : ''}">${esc(label)}</button>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function openReader() {
+  renderReaderPanel();
+  $('#readerPanel').hidden = false;
+  $('#readerScrim').hidden = false;
+  $('#readerBtn').setAttribute('aria-expanded', 'true');
+}
+
+function closeReader() {
+  $('#readerPanel').hidden = true;
+  $('#readerScrim').hidden = true;
+  $('#readerBtn').setAttribute('aria-expanded', 'false');
 }
 
 /* ============================================================
@@ -584,6 +663,24 @@ function bindGlobalEvents(annotate, search) {
     if (e.target.closest('[data-close]')) closeChangelog();
   });
 
+  // 阅读设置
+  $('#readerBtn').addEventListener('click', () => openReader());
+  $('#readerScrim').addEventListener('click', closeReader);
+  $('[data-reader-close]').addEventListener('click', closeReader);
+  $('[data-reader-reset]').addEventListener('click', () => {
+    store.resetReader();
+    applyReader();
+    renderReaderPanel();
+    toast('已恢复默认阅读设置');
+  });
+  $('#readerBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-rk]');
+    if (!btn) return;
+    store.setReaderOption(btn.dataset.rk, btn.dataset.rv);   // 立即生效并持久化
+    applyReader();
+    renderReaderPanel();
+  });
+
   // 内容区：锚点、收藏、完成、代码复制
   $('#viewRoot').addEventListener('click', async (e) => {
     const copyBtn = e.target.closest('[data-copy]');
@@ -689,6 +786,7 @@ function bindGlobalEvents(annotate, search) {
       document.body.classList.remove('nav-open');
       annotate.hideBar();
       closeChangelog();
+      closeReader();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -713,6 +811,7 @@ function bindGlobalEvents(annotate, search) {
    ============================================================ */
 function boot() {
   store.applyTheme();
+  applyReader();          // 阅读设置要在首次渲染前生效，避免闪一下默认字号
   renderPathSwitch();
 
   const annotate = initAnnotate({

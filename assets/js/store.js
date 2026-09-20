@@ -16,7 +16,13 @@ const DEFAULTS = {
   recent: [],             // 最近阅读的 chapterId 列表
   lastChapter: null,
   sidebarOpen: false,
-  lastSeenVersion: null   // 上次查看更新日志时的版本号，用于提示「有新版本」
+  lastSeenVersion: null,  // 上次查看更新日志时的版本号，用于提示「有新版本」
+  reader: {               // 阅读设置
+    scale: 'md',          // sm | md | lg | xl        正文字号
+    leading: 'normal',    // tight | normal | loose   行距
+    width: 'normal',      // narrow | normal | wide   版心宽度
+    font: 'sans'          // sans | serif             正文字体
+  }
 };
 
 let state = loadState();
@@ -196,6 +202,15 @@ export function highlightsOf(chapterId) {
 /* ---------------- 模块折叠 ---------------- */
 export function toggleCollapsed(moduleId) {
   setState({ collapsed: { ...state.collapsed, [moduleId]: !state.collapsed[moduleId] } });
+}
+
+/* ---------------- 阅读设置 ---------------- */
+export function setReaderOption(key, value) {
+  setState({ reader: { ...state.reader, [key]: value } });
+}
+
+export function resetReader() {
+  setState({ reader: { ...DEFAULTS.reader } });
 }
 
 /* ---------------- 更新日志 ---------------- */

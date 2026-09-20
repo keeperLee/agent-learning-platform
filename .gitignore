@@ -3,6 +3,11 @@ node_modules/
 _site/
 dist/
 
+# 示例项目的运行期产物与 Python 缓存
+examples/support-agent/data/state/
+__pycache__/
+*.py[cod]
+
 # 系统 / 编辑器
 .DS_Store
 Thumbs.db

@@ -1,0 +1,60 @@
+{
+  "_comment": "演示用订单数据。注意 ORD-20260828-0417 归属 u_1024，另一条归属 u_2048 —— 用于演示工具内部的归属校验（第 15 章）。",
+  "orders": [
+    {
+      "order_id": "ORD-20260828-0417",
+      "user_id": "u_1024",
+      "item": "蓝牙耳机 Pro",
+      "category": "普通商品",
+      "amount": 299.0,
+      "status": "已签收",
+      "paid_at": "2026-08-28",
+      "signed_at": "2026-08-30",
+      "refundable_until": "2026-09-06",
+      "carrier": "顺丰速运",
+      "tracking_no": "SF1234567890",
+      "insurance": "运费险已购买"
+    },
+    {
+      "order_id": "ORD-20260912-0033",
+      "user_id": "u_1024",
+      "item": "机械键盘 87 键",
+      "category": "3C 数码",
+      "amount": 468.0,
+      "status": "运输中",
+      "paid_at": "2026-09-12",
+      "signed_at": null,
+      "refundable_until": null,
+      "carrier": "京东物流",
+      "tracking_no": "JD9876543210",
+      "insurance": "未购买"
+    },
+    {
+      "order_id": "ORD-20260701-0912",
+      "user_id": "u_2048",
+      "item": "智能手表 S2",
+      "category": "3C 数码",
+      "amount": 1299.0,
+      "status": "已签收",
+      "paid_at": "2026-07-01",
+      "signed_at": "2026-07-03",
+      "refundable_until": "2026-07-10",
+      "carrier": "中通快递",
+      "tracking_no": "ZT5566778899",
+      "insurance": "未购买"
+    }
+  ],
+  "logistics": {
+    "SF1234567890": [
+      { "time": "2026-08-28 18:20", "desc": "已发货，深圳市南山区揽收" },
+      { "time": "2026-08-29 09:10", "desc": "到达深圳中转场" },
+      { "time": "2026-08-30 14:05", "desc": "派送中，配送员 王师傅 138****5678" },
+      { "time": "2026-08-30 16:42", "desc": "已签收，签收人：本人" }
+    ],
+    "JD9876543210": [
+      { "time": "2026-09-12 20:00", "desc": "已出库，北京亦庄仓" },
+      { "time": "2026-09-14 08:30", "desc": "运输中，预计 2026-09-16 送达" }
+    ]
+  },
+  "refund_requests": []
+}

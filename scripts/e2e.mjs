@@ -243,6 +243,62 @@ try {
   check(!r4.dotAfter, '打开后提示点消除');
   check(r4.closed, '可正常关闭');
   check(r4.stillArticle, '关闭后仍在原章节，视图未被破坏');
+
+  /* ---------- 场景 5：阅读设置 + 内容时效性标注 ---------- */
+  await goto(`${BASE}/#/chapter/c22`, 1800);   // c22 标记为快速变化章节
+  const r5 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    ${WAIT_ARTICLE}
+    const out = {};
+    const body = document.querySelector('.article-body');
+
+    // 时效性标注
+    out.hasNotice = !!body.querySelector('.callout.warn');
+    out.metaHasUpdated = (document.querySelector('.article-meta')?.textContent || '').includes('更新于');
+
+    // 阅读设置
+    const fsBefore = getComputedStyle(body).fontSize;
+    document.getElementById('readerBtn').click();
+    await sleep(250);
+    out.panelOpen = !document.getElementById('readerPanel').hidden;
+    out.optionCount = document.querySelectorAll('#readerBody .rp-opts button').length;
+    out.groups = document.querySelectorAll('#readerBody .rp-row').length;
+
+    document.querySelector('#readerBody button[data-rk="scale"][data-rv="xl"]').click();
+    await sleep(200);
+    out.fsBefore = fsBefore;
+    out.fsAfter = getComputedStyle(body).fontSize;
+    out.fsVar = document.documentElement.style.getPropertyValue('--reader-fs');
+
+    document.querySelector('#readerBody button[data-rk="leading"][data-rv="loose"]').click();
+    await sleep(150);
+    out.lhVar = document.documentElement.style.getPropertyValue('--reader-lh');
+
+    out.persisted = JSON.parse(localStorage.getItem('agent-learning-platform:v1') || '{}')?.reader?.scale || null;
+
+    document.querySelector('[data-reader-reset]').click();
+    await sleep(200);
+    out.fsAfterReset = getComputedStyle(body).fontSize;
+
+    document.getElementById('readerScrim').click();
+    await sleep(200);
+    out.panelClosed = document.getElementById('readerPanel').hidden;
+    out.stillArticle = !!document.querySelector('.article-body');
+    return JSON.stringify(out);
+  })()`));
+
+  console.log('');
+  console.log('  场景 5 · 阅读设置与内容时效性标注');
+  check(r5.hasNotice, '快速变化章节自动插入时效提醒');
+  check(r5.metaHasUpdated, '文章头部显示「更新于」基准时间');
+  check(r5.panelOpen, '点击 Aa 打开阅读设置面板');
+  check(r5.groups === 4, `提供 ${r5.groups} 组设置、${r5.optionCount} 个选项`);
+  check(r5.fsAfter !== r5.fsBefore && r5.fsVar.includes('19'), '切换字号立即生效',
+    `${r5.fsBefore} → ${r5.fsAfter}`);
+  check(r5.lhVar === '2.05', '切换行距立即生效', `--reader-lh = ${r5.lhVar}`);
+  check(r5.persisted === 'xl', '设置已持久化到本地');
+  check(r5.fsAfterReset === r5.fsBefore, '恢复默认生效', `回到 ${r5.fsAfterReset}`);
+  check(r5.panelClosed && r5.stillArticle, '面板可关闭且不影响阅读');
 } catch (err) {
   failed++;
   console.log('');

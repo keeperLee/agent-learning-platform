@@ -5,7 +5,8 @@
 .layout.no-toc { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
 .toc[hidden] { display: none; }
 
-.article { max-width: var(--content-max); margin: 0 auto; }
+/* 版心宽度受阅读设置控制 */
+.article { max-width: var(--reader-max, var(--content-max)); margin: 0 auto; }
 
 /* ---------------- 文章头部 ---------------- */
 .article-header { margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
@@ -30,9 +31,16 @@
 .article-actions .btn.is-on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 /* ---------------- 正文排版 ---------------- */
+/* 字号与行距受阅读设置控制 */
 .article-body {
-  font-size: 16.2px; line-height: 1.86; color: var(--text);
+  font-size: var(--reader-fs, 16.2px);
+  line-height: var(--reader-lh, 1.86);
+  color: var(--text);
   word-wrap: break-word;
+}
+html[data-reader-font="serif"] .article-body,
+html[data-reader-font="serif"] .article-lede {
+  font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
 }
 .article-body > *:first-child { margin-top: 0; }
 
@@ -142,7 +150,7 @@ mark.user-hl:hover { background: var(--mark); }
 
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 900px) {
-  .article-body { font-size: 16px; line-height: 1.82; }
+  /* 不覆盖字号与行距：那是用户的选择，移动端也应尊重 */
   .article-body h2 { margin-top: 38px; font-size: 21px; }
   .article-body h3 { font-size: 17.5px; }
   .article-body .anchor { display: none; }

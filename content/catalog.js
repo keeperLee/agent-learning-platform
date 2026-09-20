@@ -7,7 +7,7 @@
 
 window.CATALOG = {
   // 需与 content/changelog.js 的 current 保持一致（scripts/validate.mjs 会校验）
-  version: '1.3.0',
+  version: '1.4.0',
   updatedAt: '2026-09',
 
   /* 分级阅读路径（递进关系：进阶包含入门，实战包含全部） */
@@ -17,7 +17,7 @@ window.CATALOG = {
       name: '全部',
       emoji: '📚',
       level: '完整课程',
-      desc: '完整课程体系，共 24 章，涵盖从概念到生产落地的全部内容，另附参考资源、术语表与 FAQ。',
+      desc: '完整课程体系，共 26 章，涵盖从概念到生产落地的全部内容，含成本工程、完整可运行项目与参考资源、术语表、FAQ。',
       chapters: null
     },
     {
@@ -64,7 +64,7 @@ window.CATALOG = {
           summary: '梳理规则程序 → 机器学习 → LLM 应用 → Agent 的四级演进，理解每一级新增的能力。'
         },
         {
-          id: 'c03', tag: 'basic', minutes: 15,
+          id: 'c03', tag: 'basic', minutes: 15, volatile: true,
           title: 'LLM 作为 Agent 的大脑',
           summary: '模型的推理、指令遵循与工具调用能力如何构成 Agent 的决策中枢，以及它的固有短板。'
         },
@@ -123,7 +123,7 @@ window.CATALOG = {
           summary: '什么时候该拆多 Agent，常见的四种拓扑，以及避免「协作放大错误」的工程手段。'
         },
         {
-          id: 'c12', tag: 'adv', minutes: 22,
+          id: 'c12', tag: 'adv', minutes: 22, volatile: true,
           title: '编排框架选型',
           summary: 'LangGraph、AutoGen、CrewAI、Dify 等框架的定位差异与选型决策表。'
         },
@@ -178,6 +178,16 @@ window.CATALOG = {
           id: 'c21', tag: 'lab', minutes: 25,
           title: '动手实验：从零实现最小可用 Agent',
           summary: '只用标准库实现一个具备工具调用与循环控制的 Agent，约 150 行代码。'
+        },
+        {
+          id: 'c22', tag: 'adv', minutes: 20, volatile: true,
+          title: '成本工程与性能优化',
+          summary: '算清 Agent 的成本账：为什么成本随步数近似二次增长，以及五个降本杠杆的量化收益。'
+        },
+        {
+          id: 'c23', tag: 'lab', minutes: 28, volatile: true,
+          title: '完整项目：可运行的客服 Agent',
+          summary: '把前面所有机制组装成能跑的系统：零依赖、无 API Key 也能跑，含 33 项零成本测试。'
         }
       ]
     },
@@ -187,17 +197,17 @@ window.CATALOG = {
       desc: '查阅型内容，不需要顺序阅读',
       chapters: [
         {
-          id: 'c22', tag: 'ref', minutes: 16,
+          id: 'c24', tag: 'ref', minutes: 16,
           title: '延伸阅读与参考资源',
           summary: '官方文档、经典论文、开源项目、评测基准与优质长文，逐条标注其解决的问题与对应章节。'
         },
         {
-          id: 'c23', tag: 'ref', minutes: 14,
+          id: 'c25', tag: 'ref', minutes: 14,
           title: '术语表',
           summary: '60 余个中英对照术语，按主题归类，含一句话定义与易混概念辨析。'
         },
         {
-          id: 'c24', tag: 'ref', minutes: 18,
+          id: 'c26', tag: 'ref', minutes: 18,
           title: '高频问题 FAQ',
           summary: '20 个实际项目中最常卡住的问题，每题给明确判断依据而非「视情况而定」。'
         }
@@ -206,17 +216,41 @@ window.CATALOG = {
   ]
 };
 
+/* ------------------------------------------------------------
+   内容时效性
+   ------------------------------------------------------------
+   Agent 领域变化很快，所以每章都需要能回答「这份内容基于什么时间的信息」。
+
+   · 全站默认基准时间见 DEFAULT_UPDATED
+   · 单章可用 updated 字段覆盖，格式 YYYY-MM 或 YYYY-MM-DD
+   · volatile: true 表示该章涉及快速变化的内容（模型能力、框架、价格），
+     阅读页会自动在正文顶部插入一条时效提醒
+   ------------------------------------------------------------ */
+window.CATALOG.DEFAULT_UPDATED = '2026-09';
+
 /* 便捷索引（由 app.js 使用） */
 window.CATALOG.byId = (() => {
   const map = {};
   window.CATALOG.modules.forEach((m) => m.chapters.forEach((c) => {
-    map[c.id] = { ...c, moduleId: m.id, moduleName: m.name };
+    map[c.id] = {
+      ...c,
+      moduleId: m.id,
+      moduleName: m.name,
+      updated: c.updated || window.CATALOG.DEFAULT_UPDATED,
+      volatile: !!c.volatile
+    };
   }));
   return map;
 })();
 
 window.CATALOG.allChapters = (() => {
   const list = [];
-  window.CATALOG.modules.forEach((m) => m.chapters.forEach((c) => list.push({ ...c, moduleId: m.id, moduleName: m.name })));
+  window.CATALOG.modules.forEach((m) => m.chapters.forEach((c) => list.push({
+    ...c,
+    moduleId: m.id,
+    moduleName: m.name,
+    updated: c.updated || window.CATALOG.DEFAULT_UPDATED,
+    volatile: !!c.volatile
+  })));
   return list;
 })();
