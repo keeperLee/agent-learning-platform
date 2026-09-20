@@ -39,6 +39,12 @@
     </button>
 
     <div class="topbar-actions">
+      <button class="version-pill" id="changelogToggle" type="button" aria-label="查看更新日志" title="查看更新日志">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true"><path d="M12 7.5V12l3 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.6v1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span class="vp-text" id="versionText">v1.0.0</span>
+        <i class="vp-dot" id="versionDot" hidden aria-hidden="true"></i>
+      </button>
+
       <button class="icon-btn" id="notesToggle" aria-label="我的笔记与书签" title="我的笔记与书签">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none"><path d="M6 4h9l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 4v5.5H20" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 14h6M9 17.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span class="badge-count" id="notesBadge" hidden>0</span>
@@ -63,6 +69,14 @@
           <span class="dot-legend"><i class="dot dot-reading"></i>在读</span>
           <span class="dot-legend"><i class="dot dot-done"></i>完成</span>
         </div>
+        <button class="sidebar-changelog" id="sidebarChangelog" type="button">
+          <span class="sc-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M12 7.5V12l3 1.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/></svg>
+          </span>
+          <span class="sc-label">更新日志</span>
+          <span class="sc-ver" id="sidebarVersion">v1.0.0</span>
+          <i class="vp-dot" id="sidebarVersionDot" hidden aria-hidden="true"></i>
+        </button>
       </div>
     </aside>
     <div class="sidebar-scrim only-mobile" id="sidebarScrim"></div>
@@ -113,6 +127,27 @@
     </div>
   </div>
 
+  <!-- 更新日志 -->
+  <div class="overlay" id="changelogOverlay" hidden>
+    <div class="overlay-backdrop" data-close="changelog"></div>
+    <div class="palette cl-modal" role="dialog" aria-modal="true" aria-label="更新日志">
+      <div class="cl-head">
+        <div class="cl-head-main">
+          <div class="cl-kicker">更新日志</div>
+          <div class="cl-title"><b id="clCurrent">v1.0.0</b><span class="cl-sub" id="clSub"></span></div>
+        </div>
+        <button class="icon-btn" data-close="changelog" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="palette-body" id="changelogBody"></div>
+      <div class="palette-foot">
+        <span>版本记录维护在 <code>content/changelog.js</code></span>
+        <span style="margin-left:auto"><kbd>Esc</kbd> 关闭</span>
+      </div>
+    </div>
+  </div>
+
   <!-- 选中文本浮动工具条 -->
   <div class="selection-bar" id="selectionBar" hidden>
     <button data-act="highlight" class="sel-btn sel-hl">标记重点</button>
@@ -122,6 +157,7 @@
 
   <div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
 
+  <script src="content/changelog.js"></script>
   <script src="content/catalog.js"></script>
   <script type="module" src="assets/js/app.js"></script>
 </body>

@@ -35,7 +35,7 @@ const REQUIRED = [
   'assets/js/app.js', 'assets/js/store.js', 'assets/js/markdown.js',
   'assets/js/highlight.js', 'assets/js/diagrams.js', 'assets/js/demos.js',
   'assets/js/search.js', 'assets/js/annotate.js', 'assets/js/content.js',
-  'assets/js/ui.js', 'content/catalog.js'
+  'assets/js/ui.js', 'content/catalog.js', 'content/changelog.js'
 ];
 
 for (const f of REQUIRED) {
@@ -53,7 +53,9 @@ if (!existsSync(P('.nojekyll'))) {
    ============================================================ */
 globalThis.window = globalThis;
 await import(pathToFileURL(P('content/catalog.js')).href);
+await import(pathToFileURL(P('content/changelog.js')).href);
 const CAT = globalThis.CATALOG;
+const CL = globalThis.CHANGELOG;
 
 if (!CAT || !Array.isArray(CAT.modules)) {
   console.error('无法加载 content/catalog.js 中的 window.CATALOG');
@@ -268,7 +270,11 @@ for (const r of refs) {
 ok('index.html', `${refs.size} 个本地资源引用全部有效`);
 
 /* 关键挂载点 */
-const MOUNTS = ['viewRoot', 'chapterNav', 'tocInner', 'searchInput', 'drawerBody', 'selectionBar', 'toastWrap', 'readingProgress'];
+const MOUNTS = [
+  'viewRoot', 'chapterNav', 'tocInner', 'searchInput', 'drawerBody',
+  'selectionBar', 'toastWrap', 'readingProgress',
+  'changelogOverlay', 'changelogBody', 'changelogToggle', 'versionText'
+];
 for (const id of MOUNTS) {
   if (!indexHtml.includes(`id="${id}"`)) fail('index.html', `缺少脚本依赖的挂载点 #${id}`);
 }
@@ -288,7 +294,51 @@ for (const name of DEMO_NAMES) {
 ok('演示', `${DEMO_NAMES.size} 个演示组件，其中 ${usedDemos.size} 个已被引用`);
 
 /* ============================================================
-   7. 输出报告
+   7. 更新日志
+   ============================================================ */
+if (!CL || !Array.isArray(CL.entries) || CL.entries.length === 0) {
+  fail('更新日志', 'content/changelog.js 未导出有效的 window.CHANGELOG.entries');
+} else {
+  if (!CL.current) fail('更新日志', '缺少 current 字段');
+  if (!CL.types || !Object.keys(CL.types).length) fail('更新日志', '缺少 types 类型定义');
+
+  if (CL.current !== CAT.version) {
+    fail('更新日志', `版本号不一致：changelog.current = ${CL.current}，catalog.version = ${CAT.version}（请同步二者）`);
+  }
+  if (CL.entries[0].version !== CL.current) {
+    fail('更新日志', `entries[0].version（${CL.entries[0].version}）必须等于 current（${CL.current}）`);
+  }
+
+  const seenVersions = new Set();
+  CL.entries.forEach((e, i) => {
+    const w = `版本 ${e.version || `#${i + 1}`}`;
+    if (!e.version) fail('更新日志', `第 ${i + 1} 条缺少 version`);
+    else {
+      if (seenVersions.has(e.version)) fail('更新日志', `版本号重复：${e.version}`);
+      seenVersions.add(e.version);
+      if (!/^\d+\.\d+\.\d+$/.test(e.version)) fail('更新日志', `${w} 不符合语义化版本格式（应为 x.y.z）`);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) fail('更新日志', `${w} 的 date 必须是 YYYY-MM-DD`);
+    if (!['major', 'minor', 'patch'].includes(e.level)) fail('更新日志', `${w} 的 level 非法：${e.level}`);
+    if (!e.title) fail('更新日志', `${w} 缺少 title`);
+    if (!Array.isArray(e.items) || e.items.length === 0) fail('更新日志', `${w} 没有 items`);
+    (e.items || []).forEach((it) => {
+      if (!it.type || !CL.types[it.type]) fail('更新日志', `${w} 使用了未定义的条目类型：${it.type}`);
+      if (!it.text) fail('更新日志', `${w} 存在空条目`);
+    });
+  });
+
+  // 日期应从新到旧排列
+  const dates = CL.entries.map((e) => e.date).filter(Boolean);
+  for (let i = 1; i < dates.length; i++) {
+    if (dates[i] > dates[i - 1]) warn('更新日志', `第 ${i + 1} 条的日期比上一条更新，建议按时间倒序排列`);
+  }
+
+  ok('更新日志', `${CL.entries.length} 个版本（当前 ${CL.current}），版本号与 catalog 一致`);
+}
+
+/* ============================================================
+   8. 输出报告
    ============================================================ */
 const paint = (s, c) => (USE_COLOR ? `${c}${s}${C.reset}` : s);
 

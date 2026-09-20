@@ -451,6 +451,77 @@ function refreshBookmarkBtn() {
 }
 
 /* ============================================================
+   更新日志
+   ============================================================ */
+const CHANGELOG = window.CHANGELOG || null;
+const LEVEL_LABEL = { major: '主版本', minor: '功能更新', patch: '修复' };
+
+/** 更新日志文本支持 `反引号` 行内代码 */
+function fmtClText(text) {
+  return esc(String(text)).replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function hasUnseenVersion() {
+  return !!CHANGELOG && store.getLastSeenVersion() !== CHANGELOG.current;
+}
+
+function updateVersionUI() {
+  if (!CHANGELOG) {
+    $('#changelogToggle').hidden = true;
+    $('#sidebarChangelog').hidden = true;
+    return;
+  }
+  const unseen = hasUnseenVersion();
+  const label = `v${CHANGELOG.current}`;
+  $('#versionText').textContent = label;
+  $('#sidebarVersion').textContent = label;
+  $('#versionDot').hidden = !unseen;
+  $('#sidebarVersionDot').hidden = !unseen;
+  $('#changelogToggle').title = unseen
+    ? `有新版本 ${label}，点击查看更新日志`
+    : '查看更新日志';
+}
+
+function renderChangelog() {
+  const entries = CHANGELOG.entries || [];
+  const types = CHANGELOG.types || {};
+  $('#clCurrent').textContent = `v${CHANGELOG.current}`;
+  $('#clSub').textContent = `共 ${entries.length} 个版本 · 最近更新 ${entries[0] ? entries[0].date : '—'}`;
+
+  $('#changelogBody').innerHTML = `<div class="cl-list">${entries.map((entry, i) => `
+    <div class="cl-item ${i === 0 ? 'is-latest' : ''}">
+      <div class="cl-row">
+        <span class="cl-ver">v${esc(entry.version)}</span>
+        <span class="cl-level ${esc(entry.level || 'patch')}">${esc(LEVEL_LABEL[entry.level] || '更新')}</span>
+        ${i === 0 ? '<span class="cl-latest">当前版本</span>' : ''}
+        <span class="cl-date">${esc(entry.date)}</span>
+      </div>
+      <div class="cl-item-title">${fmtClText(entry.title)}</div>
+      <ul class="cl-items">
+        ${(entry.items || []).map((it) => {
+          const meta = types[it.type] || { label: it.type, cls: 't-chore' };
+          return `<li><span class="cl-tag ${esc(meta.cls)}">${esc(meta.label)}</span><span>${fmtClText(it.text)}</span></li>`;
+        }).join('')}
+      </ul>
+    </div>`).join('')}</div>`;
+}
+
+function openChangelog() {
+  if (!CHANGELOG) return;
+  renderChangelog();
+  $('#changelogOverlay').hidden = false;
+  document.body.classList.add('no-scroll');
+  $('#changelogBody').scrollTop = 0;
+  store.setLastSeenVersion(CHANGELOG.current);
+  updateVersionUI();
+}
+
+function closeChangelog() {
+  $('#changelogOverlay').hidden = true;
+  document.body.classList.remove('no-scroll');
+}
+
+/* ============================================================
    路由分发
    ============================================================ */
 function route() {
@@ -500,6 +571,17 @@ function bindGlobalEvents(annotate, search) {
   });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (store.getState().theme === 'auto') store.applyTheme();
+  });
+
+  // 更新日志入口（顶栏版本号 / 侧边栏底部）
+  $('#changelogToggle').addEventListener('click', openChangelog);
+  $('#sidebarChangelog').addEventListener('click', () => {
+    document.body.classList.remove('nav-open');
+    $('#menuToggle').setAttribute('aria-expanded', 'false');
+    openChangelog();
+  });
+  $('#changelogOverlay').addEventListener('click', (e) => {
+    if (e.target.closest('[data-close]')) closeChangelog();
   });
 
   // 内容区：锚点、收藏、完成、代码复制
@@ -606,6 +688,7 @@ function bindGlobalEvents(annotate, search) {
     if (e.key === 'Escape') {
       document.body.classList.remove('nav-open');
       annotate.hideBar();
+      closeChangelog();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -644,6 +727,7 @@ function boot() {
 
   bindGlobalEvents(annotate, search);
   refreshBadges();
+  updateVersionUI();
   route();
 
   window.addEventListener('hashchange', () => {

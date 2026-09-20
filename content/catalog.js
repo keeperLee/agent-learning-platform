@@ -6,7 +6,8 @@
    ============================================================ */
 
 window.CATALOG = {
-  version: '1.0.0',
+  // 需与 content/changelog.js 的 current 保持一致（scripts/validate.mjs 会校验）
+  version: '1.3.0',
   updatedAt: '2026-09',
 
   /* 分级阅读路径（递进关系：进阶包含入门，实战包含全部） */

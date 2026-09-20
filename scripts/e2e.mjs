@@ -207,6 +207,42 @@ try {
   check(r3.href && r3.href.startsWith('#'), '锚点链接已渲染', String(r3.href));
   check(r3.onArticle && !r3.onHome, '点击后仍停留在章节页');
   check(r3.hash.includes('#/chapter/'), '地址栏更新为带锚点的章节路由', r3.hash.slice(0, 60));
+
+  /* ---------- 场景 4：更新日志入口 ---------- */
+  await goto(`${BASE}/#/chapter/${CHAPTER}`);
+  const r4 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    ${WAIT_ARTICLE}
+    const out = {};
+    const btn = document.getElementById('changelogToggle');
+    out.btnText = btn?.textContent?.trim() || null;
+    out.dotBefore = !document.getElementById('versionDot')?.hidden;
+    btn.click();
+    await sleep(350);
+    const ov = document.getElementById('changelogOverlay');
+    out.opened = !!ov && !ov.hidden;
+    out.versions = [...document.querySelectorAll('#changelogBody .cl-ver')].map(n => n.textContent.trim());
+    out.items = document.querySelectorAll('#changelogBody .cl-items li').length;
+    out.hasLatest = !!document.querySelector('#changelogBody .cl-item.is-latest');
+    out.dotAfter = !document.getElementById('versionDot')?.hidden;
+    document.querySelector('#changelogOverlay [data-close]')?.click();
+    await sleep(250);
+    out.closed = document.getElementById('changelogOverlay').hidden;
+    out.stillArticle = !!document.querySelector('.article-body');
+    return JSON.stringify(out);
+  })()`));
+
+  console.log('');
+  console.log('  场景 4 · 更新日志入口（顶栏版本号）');
+  check(/^v\d+\.\d+\.\d+$/.test(r4.btnText || ''), '顶栏显示版本号', String(r4.btnText));
+  check(r4.dotBefore, '未读时入口带提示点');
+  check(r4.opened, '点击后打开更新日志面板');
+  check(r4.versions.length >= 2, `面板列出 ${r4.versions.length} 个版本`, r4.versions.slice(0, 3).join(' / '));
+  check(r4.items > 0, `共 ${r4.items} 条变更记录`);
+  check(r4.hasLatest, '最新版本有标记');
+  check(!r4.dotAfter, '打开后提示点消除');
+  check(r4.closed, '可正常关闭');
+  check(r4.stillArticle, '关闭后仍在原章节，视图未被破坏');
 } catch (err) {
   failed++;
   console.log('');

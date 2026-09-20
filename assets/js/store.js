@@ -15,7 +15,8 @@ const DEFAULTS = {
   collapsed: {},          // moduleId -> 是否折叠
   recent: [],             // 最近阅读的 chapterId 列表
   lastChapter: null,
-  sidebarOpen: false
+  sidebarOpen: false,
+  lastSeenVersion: null   // 上次查看更新日志时的版本号，用于提示「有新版本」
 };
 
 let state = loadState();
@@ -195,6 +196,14 @@ export function highlightsOf(chapterId) {
 /* ---------------- 模块折叠 ---------------- */
 export function toggleCollapsed(moduleId) {
   setState({ collapsed: { ...state.collapsed, [moduleId]: !state.collapsed[moduleId] } });
+}
+
+/* ---------------- 更新日志 ---------------- */
+export function getLastSeenVersion() { return state.lastSeenVersion; }
+
+export function setLastSeenVersion(version) {
+  if (state.lastSeenVersion === version) return;
+  setState({ lastSeenVersion: version });
 }
 
 /* ---------------- 导出 / 导入 ---------------- */
