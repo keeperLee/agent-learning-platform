@@ -66,6 +66,7 @@ npx --yes serve -p 5173 .
 | `npm run dev` | 启动本地服务器（零依赖，跨平台） |
 | `npm run validate` | 运行内容与结构校验（CI 用的同一个脚本） |
 | `npm run check-links` | 检查全部外链可用性（需要网络，不参与 CI） |
+| `npm run e2e` | 浏览器交互回归测试（需先启动服务，用 `--base` 指定地址） |
 
 > 修改内容后刷新浏览器即可生效，无需构建。**提交前建议先跑一次 `npm run validate`**，与 CI 结果一致。
 
@@ -116,7 +117,11 @@ git push  →  CI（校验）  →  通过  →  Build（打包）  →  Deploy�
 
 另有基线检查：单章正文过短（< 800 字）视为未完成并报错；过长的标题、过长的正文会给出警告。
 
-CI 中还包含 **JS 语法检查**（`node --check`）与 **HTTP 冒烟测试**（起真实服务，逐个断言关键资源返回 200，且 `.md` 的 `Content-Type` 不是 `text/html`）。
+CI 中还包含三类运行时检查：
+
+1. **JS 语法检查**：`node --check` 覆盖 `assets/js/`、`scripts/` 与 `content/catalog.js`。
+2. **HTTP 冒烟测试**：起真实服务，逐个断言关键资源返回 200，且 `.md` 的 `Content-Type` 不是 `text/html`（即没被 Jekyll 处理）。
+3. **浏览器交互回归测试**（`scripts/e2e.mjs`）：通过 CDP 驱动真实浏览器点击，覆盖静态检查查不到的行为 —— 例如「点击右侧目录应就地滚动而不是跳回首页」「带锚点的深链接要正确定位」。环境里没有浏览器时返回码为 2，CI 会跳过并给出警告而不阻断部署。
 
 ### 首次接入步骤
 
@@ -182,6 +187,7 @@ CI 中还包含 **JS 语法检查**（`node --check`）与 **HTTP 冒烟测试**
 │   └── deploy-pages.yml           # CD：validate → build → deploy
 ├── scripts/
 │   ├── validate.mjs               # 内容与结构校验（复用站点渲染器）
+│   ├── e2e.mjs                    # 浏览器交互回归测试（CDP 真实点击）
 │   ├── check-links.mjs            # 外链可用性检查（需网络，手动运行）
 │   └── serve.mjs                  # 零依赖本地静态服务器
 ├── assets/

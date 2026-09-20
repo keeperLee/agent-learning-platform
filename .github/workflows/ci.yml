@@ -51,8 +51,8 @@ jobs:
       - name: 内容与结构校验
         run: node scripts/validate.mjs
 
-      # 3) 冒烟测试：启动真实服务，逐个断言关键资源
-      - name: HTTP 冒烟测试
+      # 3) 冒烟测试：启动真实服务，断言资源可访问，并做浏览器交互回归
+      - name: 冒烟测试（HTTP + 浏览器交互）
         run: |
           set -e
           BASE=http://127.0.0.1:5173
@@ -98,6 +98,18 @@ jobs:
             echo "$page" | grep -q "id=\"$id\"" || { echo "  ✗ index.html 缺少挂载点 #$id"; exit 1; }
           done
           echo "  ✓ 关键挂载点齐备"
+
+          # 浏览器交互回归测试（深链接 / 锚点跳转等静态检查覆盖不到的行为）
+          # 退出码 2 表示环境无可用浏览器 → 跳过而不失败
+          set +e
+          node scripts/e2e.mjs --base "$BASE"
+          e2e_code=$?
+          set -e
+          if [ "$e2e_code" = "2" ]; then
+            echo "::warning::环境中没有可用浏览器，已跳过交互测试"
+          elif [ "$e2e_code" != "0" ]; then
+            exit "$e2e_code"
+          fi
 
       # 4) 部署产物检查
       - name: 检查 Pages 部署产物

@@ -15,6 +15,7 @@
     "validate": "node scripts/validate.mjs",
     "test": "node scripts/validate.mjs",
     "check-links": "node scripts/check-links.mjs",
+    "e2e": "node scripts/e2e.mjs",
     "predeploy-check": "node scripts/validate.mjs"
   }
 }

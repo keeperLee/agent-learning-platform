@@ -20,8 +20,16 @@ let tocObserverLock = false;
 /* ============================================================
    路由
    ============================================================ */
+/** decodeURIComponent 在遇到非法转义序列时会抛错，这里做一次兜底 */
+function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch (_) { return String(s); }
+}
+
 function parseRoute() {
-  const raw = decodeURIComponent(location.hash.replace(/^#/, ''));
+  const raw = safeDecode(location.hash.replace(/^#/, ''));
+  // 不以 "/" 开头的 hash 是「页内锚点」（如 #为什么），不属于路由。
+  // 若把它当成路由解析，会被误判为首页并触发整页重渲染。
+  if (raw && !raw.startsWith('/')) return { name: 'anchor', anchor: raw };
   const [pathPart, anchor] = raw.split('#');
   const seg = (pathPart || '/').split('/').filter(Boolean);
   if (seg[0] === 'chapter' && seg[1]) return { name: 'chapter', id: seg[1], anchor: anchor || '' };
@@ -29,7 +37,7 @@ function parseRoute() {
 }
 
 function navigate(chapterId, anchor = '') {
-  const hash = chapterId ? `#/chapter/${chapterId}${anchor ? `#${anchor}` : ''}` : '#/';
+  const hash = chapterId ? `#/chapter/${chapterId}${anchor ? `#${encodeURIComponent(anchor)}` : ''}` : '#/';
   if (location.hash === hash) { route(); return; }
   location.hash = hash;
 }
@@ -328,7 +336,11 @@ async function renderChapter(id, anchor) {
 
   // 滚动到锚点或顶部
   if (anchor) {
-    setTimeout(() => scrollToAnchor(anchor, false), 60);
+    // 深链接首次定位：立即跳转（不用平滑动画），并在演示组件挂载后校正一次
+    const jump = () => scrollToAnchor(anchor, false, false);
+    jump();
+    setTimeout(jump, 80);
+    setTimeout(() => { if (document.getElementById(anchor)) jump(); }, 360);
   } else if (p.scroll && p.state !== 'done') {
     setTimeout(() => window.scrollTo({ top: p.scroll }), 40);
   } else {
@@ -342,17 +354,25 @@ function renderToc(toc) {
     $('#tocInner').innerHTML = '<p class="toc-title">本篇目录</p><p class="muted" style="font-size:12.5px">本章暂无小节目录</p>';
     return;
   }
+  // 目录链接写成完整路由（#/chapter/cXX#anchor），这样中键 / 复制链接 / 新标签页
+  // 打开的地址都是正确的；普通点击则由全局锚点处理器就地滚动，不触发重渲染。
   $('#tocInner').innerHTML = `<p class="toc-title">本篇目录</p>` +
-    toc.map((t) => `<a class="lv${t.level}" href="#${t.id}" data-anchor="${t.id}">${esc(t.text)}</a>`).join('');
+    toc.map((t) => `<a class="lv${t.level}" href="#/chapter/${currentChapterId}#${encodeURIComponent(t.id)}" data-anchor="${esc(t.id)}">${esc(t.text)}</a>`).join('');
 }
 
-function scrollToAnchor(id, updateHash = true) {
+/**
+ * 滚动到指定锚点
+ * @param {string} id 元素 id
+ * @param {boolean} updateHash 是否把地址栏更新为 #/chapter/xxx#锚点
+ * @param {boolean} smooth 是否平滑滚动（深链接首次定位应为 false）
+ */
+function scrollToAnchor(id, updateHash = true, smooth = true) {
   const node = document.getElementById(id);
   if (!node) return;
   const top = node.getBoundingClientRect().top + window.scrollY - 78;
-  window.scrollTo({ top, behavior: 'smooth' });
+  window.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
   if (updateHash && currentChapterId) {
-    history.replaceState(null, '', `#/chapter/${currentChapterId}#${id}`);
+    history.replaceState(null, '', `#/chapter/${currentChapterId}#${encodeURIComponent(id)}`);
   }
 }
 
@@ -484,17 +504,6 @@ function bindGlobalEvents(annotate, search) {
 
   // 内容区：锚点、收藏、完成、代码复制
   $('#viewRoot').addEventListener('click', async (e) => {
-    const anchorLink = e.target.closest('a[href^="#"]');
-    if (anchorLink) {
-      const href = anchorLink.getAttribute('href');
-      if (!href.startsWith('#/')) {
-        e.preventDefault();
-        const id = anchorLink.dataset.anchor || href.slice(1);
-        if (currentToc.some((t) => t.id === id) || document.getElementById(id)) scrollToAnchor(id);
-        return;
-      }
-    }
-
     const copyBtn = e.target.closest('[data-copy]');
     if (copyBtn) {
       const block = copyBtn.closest('.code-block');
@@ -553,6 +562,38 @@ function bindGlobalEvents(annotate, search) {
     }
   });
 
+  /* ---------- 页内锚点：统一在 document 层拦截 ----------
+     覆盖三处来源：右侧「本篇目录」、正文标题的 # 锚点、Markdown 里的 [文字](#锚点)。
+     右侧目录在 #viewRoot 之外，所以必须挂在 document 上才能拦到。 */
+  document.addEventListener('click', (e) => {
+    if (!(e.target instanceof Element)) return;
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    const href = link.getAttribute('href');
+    if (!href || href === '#/') return;              // 首页链接交给路由
+
+    // 情况一：完整路由 + 锚点（#/chapter/c06#锚点）
+    const m = href.match(/^#\/chapter\/([^#]+)(?:#(.+))?$/);
+    if (m) {
+      const cid = m[1];
+      const anchor = m[2] ? safeDecode(m[2]) : '';
+      if (anchor && cid === currentChapterId) {
+        // 指向当前章节：就地滚动即可（支持重复点击同一目录项）
+        e.preventDefault();
+        scrollToAnchor(anchor);
+        flashAnchor(anchor);
+      }
+      return;                                        // 其它路由交给 hashchange
+    }
+
+    // 情况二：纯页内锚点 #锚点
+    if (!href.startsWith('#/')) {
+      e.preventDefault();
+      const id = link.dataset.anchor || safeDecode(href.slice(1));
+      if (id) scrollToAnchor(id);
+    }
+  });
+
   // 滚动
   window.addEventListener('scroll', updateReadingProgress, { passive: true });
   window.addEventListener('resize', updateReadingProgress);
@@ -607,6 +648,8 @@ function boot() {
 
   window.addEventListener('hashchange', () => {
     const r = parseRoute();
+    // 纯页内锚点不改变视图：交给浏览器原生定位，不要重渲染
+    if (r.name === 'anchor') return;
     if (r.anchor && currentChapterId === r.id) {
       scrollToAnchor(r.anchor);
       flashAnchor(r.anchor);
