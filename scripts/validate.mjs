@@ -30,7 +30,7 @@ const ok = (scope, msg) => group.push({ scope, msg, level: 'ok' });
    0. 关键文件
    ============================================================ */
 const REQUIRED = [
-  'index.html', 'README.md', '.nojekyll',
+  'index.html', 'learning.html', 'README.md', '.nojekyll',
   'assets/css/main.css', 'assets/css/components.css', 'assets/css/reader.css',
   'assets/css/auth.css',
   'assets/js/app.js', 'assets/js/store.js', 'assets/js/markdown.js',
@@ -40,7 +40,7 @@ const REQUIRED = [
   // 认证相关：用户目录是登录的唯一依据，缺任何一个都会导致无法登录
   'assets/js/crypto.js', 'assets/js/userdir.js', 'assets/js/auth.js',
   'assets/js/login.js', 'assets/js/admin.js',
-  'content/users.js', 'scripts/user.mjs'
+  'server/auth.mjs', 'scripts/serve.mjs'
 ];
 
 for (const f of REQUIRED) {
@@ -59,10 +59,10 @@ if (!existsSync(P('.nojekyll'))) {
 globalThis.window = globalThis;
 await import(pathToFileURL(P('content/catalog.js')).href);
 await import(pathToFileURL(P('content/changelog.js')).href);
-await import(pathToFileURL(P('content/users.js')).href);
+
 const CAT = globalThis.CATALOG;
 const CL = globalThis.CHANGELOG;
-const UD = globalThis.USER_DIRECTORY;
+
 
 if (!CAT || !Array.isArray(CAT.modules)) {
   console.error('无法加载 content/catalog.js 中的 window.CATALOG');
@@ -303,7 +303,7 @@ ok('内链', `${linkCount} 处章节引用全部指向存在的章节与锚点`)
 /* ============================================================
    5. index.html 资源引用
    ============================================================ */
-const indexHtml = readFileSync(P('index.html'), 'utf8');
+const indexHtml = readFileSync(P('learning.html'), 'utf8');
 const refs = new Set();
 for (const m of indexHtml.matchAll(/(?:href|src)="([^"]+)"/g)) {
   const url = m[1];
@@ -312,9 +312,9 @@ for (const m of indexHtml.matchAll(/(?:href|src)="([^"]+)"/g)) {
 }
 let missingRefs = 0;
 for (const r of refs) {
-  if (!existsSync(P(r))) { fail('index.html', `引用的资源不存在：${r}`); missingRefs++; }
+  if (!existsSync(P(r))) { fail('learning.html', `引用的资源不存在：${r}`); missingRefs++; }
 }
-ok('index.html', `${refs.size} 个本地资源引用全部有效`);
+ok('learning.html', `${refs.size} 个本地资源引用全部有效`);
 
 /* 关键挂载点 */
 const MOUNTS = [
@@ -330,9 +330,9 @@ const MOUNTS = [
   'adminOverlay', 'adminBody', 'adminSub'
 ];
 for (const id of MOUNTS) {
-  if (!indexHtml.includes(`id="${id}"`)) fail('index.html', `缺少脚本依赖的挂载点 #${id}`);
+  if (!indexHtml.includes(`id="${id}"`)) fail('learning.html', `缺少脚本依赖的挂载点 #${id}`);
 }
-ok('index.html', `脚本依赖的 ${MOUNTS.length} 个挂载点齐备`);
+ok('learning.html', `脚本依赖的 ${MOUNTS.length} 个挂载点齐备`);
 
 /* ============================================================
    6. 演示与示意图覆盖率
@@ -436,78 +436,7 @@ if (!CL || !Array.isArray(CL.entries) || CL.entries.length === 0) {
 /* ============================================================
    7.6 用户目录
    ============================================================ */
-if (!UD || !Array.isArray(UD.users)) {
-  fail('用户目录', 'content/users.js 未导出有效的 window.USER_DIRECTORY.users');
-} else {
-  const seen = new Set();
-  let activeAdmins = 0;
-  const FORBIDDEN = ['password', 'passwd', 'pwd', 'plain', 'plainPassword', 'rawPassword', 'secret'];
-
-  UD.users.forEach((u, i) => {
-    const name = String(u.username || '');
-    const w = `账号 ${name || `#${i + 1}`}`;
-
-    if (!name) fail('用户目录', `${w} 缺少 username`);
-    else if (!/^[a-z0-9_]{3,24}$/.test(name)) {
-      fail('用户目录', `${w} 的 username 非法（只允许小写字母、数字、下划线，3~24 位）`);
-    }
-    if (name) {
-      if (seen.has(name)) fail('用户目录', `登录名重复：${name}`);
-      seen.add(name);
-    }
-
-    if (!u.displayName) fail('用户目录', `${w} 缺少 displayName`);
-    if (!['admin', 'member'].includes(u.role)) fail('用户目录', `${w} 的 role 非法：${u.role}`);
-    if (typeof u.active !== 'boolean') fail('用户目录', `${w} 的 active 必须是布尔值`);
-    if (u.active === true && u.role === 'admin') activeAdmins++;
-
-    // 明文字段检测：这个文件会被提交并且公开
-    for (const k of Object.keys(u)) {
-      if (FORBIDDEN.includes(k)) {
-        fail('用户目录', `${w} 出现了明文字段「${k}」。该文件会被提交到仓库并公开，绝不能存放明文密码`);
-      }
-    }
-
-    const c = u.credential;
-    if (!c || typeof c !== 'object') {
-      fail('用户目录', `${w} 缺少 credential`);
-    } else {
-      if (!c.salt || !/^[0-9a-f]{16,}$/i.test(String(c.salt))) {
-        fail('用户目录', `${w} 的 salt 缺失或格式异常（应为 16 位以上的十六进制）`);
-      }
-      if (!c.hash || !/^[0-9a-f]{64}$/i.test(String(c.hash))) {
-        fail('用户目录', `${w} 的 hash 必须是 64 位十六进制（SHA-256 输出）`);
-      }
-      if (!Number.isInteger(c.iterations) || c.iterations < 1) {
-        fail('用户目录', `${w} 的 iterations 必须是正整数`);
-      } else if (c.iterations < 1000) {
-        warn('用户目录', `${w} 的迭代次数偏低（${c.iterations}），建议不低于 1000`);
-      }
-    }
-
-    if (u.createdAt && !/^\d{4}-\d{2}-\d{2}$/.test(String(u.createdAt))) {
-      warn('用户目录', `${w} 的 createdAt 不是 YYYY-MM-DD 格式：${u.createdAt}`);
-    }
-  });
-
-  if (UD.users.length === 0) fail('用户目录', '名单为空 —— 将没有任何人能登录');
-  if (activeAdmins === 0) fail('用户目录', '没有任何启用的管理员 —— 将无法再通过界面管理用户');
-
-  // 序列化是否规范：手工编辑容易破坏格式，下次导出会整体重排
-  try {
-    const canonical = readFileSync(P('content/users.js'), 'utf8');
-    const generated = serializeDirectory(UD.users, { generatedAt: '<ignored>' });
-    const strip = (s) => s.replace(/^.{0,4}导出时间 .*$/m, '').replace(/\r/g, '').trim();
-    if (strip(canonical) !== strip(generated)) {
-      warn('用户目录', 'content/users.js 的格式与管理后台导出不完全一致（手工编辑过？）。功能不受影响，下次导出会重排格式');
-    }
-  } catch (_) { /* 格式比对失败不影响校验结论 */ }
-
-  if (activeAdmins > 0 && UD.users.length > 0) {
-    ok('用户目录', `${UD.users.length} 个账号（${activeAdmins} 个启用管理员），凭据格式全部合法`);
-  }
-}
-
+if (existsSync(P('content/users.js'))) fail('用户目录', '不应包含公开用户凭据文件');
 /* ============================================================
    8. 输出报告
    ============================================================ */

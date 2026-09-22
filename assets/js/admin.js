@@ -1,17 +1,3 @@
-/* ============================================================
-   管理后台（仅管理员可见）
-   ------------------------------------------------------------
-   这里最容易被误解的一点：在界面上点了「注册用户」，改动只会
-   落在这个浏览器的 localStorage 里，别人看不到。
-
-   所以整个界面围绕一件事设计 —— 让「未发布的改动」始终显眼，
-   并且把「导出 users.js → 覆盖文件 → 提交推送」这条路走通。
-
-   列表页顶部常驻一条状态条：
-     · 有未发布改动 → 黄色警示 + 导出/复制/丢弃按钮
-     · 没有未发布改动 → 灰色说明，表示本机与仓库一致
-   ============================================================ */
-
 import * as auth from './auth.js';
 import { $, esc, toast, copyText } from './ui.js';
 import { refreshUserMenu } from './login.js';
@@ -40,7 +26,7 @@ function downloadFile(filename, content, mime = 'text/javascript;charset=utf-8')
 /* ============================================================
    渲染
    ============================================================ */
-export function renderAdmin() {
+export async function renderAdmin() {
   const me = auth.currentUser();
   const body = $('#adminBody');
   if (!body) return;
@@ -49,7 +35,8 @@ export function renderAdmin() {
     return;
   }
 
-  const users = auth.listUsers();
+  let users;
+  try { users = await auth.loadUsers(); } catch (e) { body.textContent=e.message; return; }
   const pending = auth.pendingChanges();
   const activeCount = users.filter((u) => u.active).length;
   const adminCount = users.filter((u) => u.role === 'admin' && u.active).length;
@@ -68,45 +55,8 @@ export function renderAdmin() {
   bindOnce(body);
 }
 
-function pendingHTML(p) {
-  if (!p.dirty) {
-    return `<div class="admin-note is-clean">
-      <span class="an-ico">✓</span>
-      <div>
-        本机改动已与仓库名单一致，没有待发布的内容。
-        <br />当前名单来自仓库根目录的 <code>content/users.js</code>，全员共享。
-      </div>
-    </div>`;
-  }
-
-  return `<div class="admin-note">
-    <span class="an-ico">⚠️</span>
-    <div>
-      <b>有 ${p.count} 项改动只存在于这个浏览器，尚未对其他人生效。</b>
-      <br />用户名单必须提交到仓库才能被所有人生效 —— 别人打开站点时读的是
-      <code>content/users.js</code>，读不到你这里的改动。
-      ${p.baseChanged ? '<br /><span style="color:var(--danger)">注意：仓库名单在此期间被其他人更新过，直接覆盖可能丢掉对方的改动，建议先核对。</span>' : ''}
-      <div class="admin-note-actions">
-        <button class="btn btn-sm btn-primary" type="button" data-adm="export-file">下载 users.js</button>
-        <button class="btn btn-sm" type="button" data-adm="export-copy">复制内容</button>
-        <button class="btn btn-sm btn-ghost" type="button" data-adm="discard">丢弃本机改动</button>
-      </div>
-      <div style="margin-top:10px;font-size:12px;color:var(--text-3);line-height:1.75">
-        发布步骤：下载 → 覆盖项目根目录的 <code>content/users.js</code> →
-        <code>git add . && git commit -m "chore: 更新用户名单" && git push</code>。
-        CI 校验通过后自动发布，约 1 分钟全员生效。
-      </div>
-    </div>
-  </div>`;
-}
-
-function toolbarHTML(p) {
-  return `<div class="admin-toolbar">
-    <button class="btn btn-sm btn-primary" type="button" data-adm="toggle-form">＋ 注册新用户</button>
-    <span class="grow"></span>
-    <span class="admin-count">${p.dirty ? `${p.count} 项待发布` : '本机与仓库一致'}</span>
-  </div>`;
-}
+function pendingHTML() { return '<div class="admin-note is-clean">账号信息来自服务器数据库，修改后立即生效，无需导出或提交。</div>'; }
+function toolbarHTML() { return '<div class="admin-toolbar"><button class="btn btn-sm btn-primary" data-adm="toggle-form">注册新用户</button></div>'; }
 
 function registerFormHTML() {
   return `<div class="admin-form" id="adminForm" hidden>
@@ -125,12 +75,12 @@ function registerFormHTML() {
     </div>
     <label class="field">
       <span>初始密码 *</span>
-      <input type="text" id="nuPw" placeholder="至少 ${auth.MIN_PASSWORD} 位" autocomplete="off" />
+      <input type="password" id="nuPw" placeholder="至少 ${auth.MIN_PASSWORD} 位" autocomplete="off" />
       <div class="pw-meter" id="nuPwMeter" data-score="">
         <div class="pw-bars"><i></i><i></i><i></i><i></i></div>
         <div class="pw-label">强度：<b>—</b></div>
       </div>
-      <span class="hint">明文显示便于当面转达；系统只保存加盐哈希，不保存明文，创建后无法找回，只能重置。</span>
+      <span class="hint">系统只保存加盐哈希，不保存明文，创建后无法找回，只能重置。</span>
     </label>
     <div class="field-row">
       <label class="field">
@@ -209,23 +159,8 @@ function userRow(u, me) {
   </tr>`;
 }
 
-function boundaryHTML() {
-  return `<div class="admin-note is-clean" style="margin-top:18px;margin-bottom:0">
-    <span class="an-ico">🔒</span>
-    <div>
-      <b>关于安全边界（请务必了解）</b>
-      <br />本平台是纯静态站点，没有服务端。「登录」属于访问控制，不是安全防护：
-      任何人打开开发者工具都能改变登录状态；用户名单因为要公开在仓库里，哈希可被离线爆破。
-      <br />因此请勿让任何人使用其真实账号的密码，也不要在本平台存放敏感信息。
-      如需真正的账号安全与多设备数据同步，必须接入后端服务（届时只需替换
-      <code>assets/js/auth.js</code> 中的 provider 实现）。
-    </div>
-  </div>`;
-}
+function boundaryHTML() { return '<p class="hint">密码仅保存加盐哈希。重置密码或停用用户会立即使已有会话失效。</p>'; }
 
-/* ============================================================
-   表单消息 / 密码强度
-   ============================================================ */
 function formMsg(text, kind = 'is-error') {
   const box = $('#adminFormMsg');
   if (!box) return;
@@ -312,8 +247,8 @@ async function handleAction(act, username, btn) {
 
       if (!res.ok) { formMsg(res.error); return; }
 
-      formMsg(`账号「${res.user.username}」已创建。注意：现在只有这一台浏览器能用它登录，`
-        + `必须导出 users.js 并提交后才对其他人生效。`, 'is-warn');
+      formMsg(`账号「${res.user.username}」已创建。`
+        + `账号已保存到数据库，可以在其他设备登录。`, 'is-warn');
       $('#adminForm').hidden = true;
       afterChange();
       toast(`已创建 ${res.user.username}`);
@@ -328,7 +263,7 @@ async function handleAction(act, username, btn) {
       const res = await auth.setUserActive(username, next);
       if (!res.ok) { toast(res.error); return; }
       afterChange();
-      toast(next ? '账号已启用' : '账号已停用（记得导出并提交）');
+      toast(next ? '账号已启用' : '账号已停用');
       return;
     }
 
@@ -352,7 +287,7 @@ async function handleAction(act, username, btn) {
       const res = await auth.resetPassword(username, pw);
       if (!res.ok) { toast(res.error); return; }
       afterChange();
-      toast(`已重置 ${username} 的密码（记得导出并提交）`);
+      toast(`已重置 ${username} 的密码`);
       return;
     }
 
@@ -363,27 +298,7 @@ async function handleAction(act, username, btn) {
       const res = await auth.removeUser(username);
       if (!res.ok) { toast(res.error); return; }
       afterChange();
-      toast('账号已删除（记得导出并提交）');
-      return;
-    }
-
-    case 'export-file': {
-      downloadFile('users.js', auth.exportDirectory());
-      toast('已下载 users.js，请覆盖项目根目录下的 content/users.js');
-      return;
-    }
-
-    case 'export-copy': {
-      const ok = await copyText(auth.exportDirectory());
-      toast(ok ? '已复制，粘贴覆盖 content/users.js 即可' : '复制失败，请改用下载');
-      return;
-    }
-
-    case 'discard': {
-      if (!window.confirm('丢弃本机所有未发布的用户改动？\n\n界面将回到仓库 content/users.js 中的名单，你的改动不可恢复。')) return;
-      auth.discardLocalChanges();
-      afterChange();
-      toast('已丢弃本机改动');
+      toast('账号已删除');
       return;
     }
 

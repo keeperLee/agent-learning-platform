@@ -16,7 +16,7 @@
    ⑥ 用户管理：列表、注册、未发布提示、丢弃本机改动
    ⑦ 学习数据按账号隔离，互不串扰
 
-   ⚠️ 这个脚本会用到内置的初始管理员账号（见 content/users.js）。
+   使用 E2E_USER / E2E_PASS 指定已经初始化的专用测试账号。
       它只在临时的浏览器 profile 里操作，不会修改仓库里的用户名单。
    ============================================================ */
 
@@ -131,8 +131,9 @@ async function goto(url, waitMs = 1500) {
 /* ---------------- 登录辅助 ----------------
    登录状态存在 localStorage，而每次测试都用全新的 user-data-dir，
    所以每个场景开始前都需要先登录。 */
-const ADMIN_USER = process.env.E2E_USER || 'lijian';
-const ADMIN_PASS = process.env.E2E_PASS || '1qaz2wsx';
+const ADMIN_USER = process.env.E2E_USER || 'admin';
+const ADMIN_PASS = process.env.E2E_PASS;
+if(!ADMIN_PASS) throw new Error('请通过 E2E_PASS 提供专用测试账号密码');
 
 /** 提交登录表单（不等待结果） */
 async function fillLogin(username, password) {
@@ -197,7 +198,7 @@ console.log(paint('  ' + '─'.repeat(58), C.dim));
 
 try {
   /* ---------- 场景 0：登录门禁 ---------- */
-  await goto(`${BASE}/`, 1800);
+  await goto(`${BASE}/learning.html`, 1800);
   const r0 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const out = {};
@@ -253,7 +254,7 @@ try {
   check(r0b.topbarDisplay !== 'none' && !r0b.locked && !r0b.pending, '应用外壳已解除锁定并可见');
 
   /* ---------- 场景 1：点击右侧「本篇目录」 ---------- */
-  await goto(`${BASE}/#/chapter/${CHAPTER}`);
+  await goto(`${BASE}/learning.html#/chapter/${CHAPTER}`);
   const r1 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     ${WAIT_ARTICLE}
@@ -286,7 +287,7 @@ try {
 
   /* ---------- 场景 2：直接打开带锚点的深链接 ---------- */
   const anchorName = r1.anchor;
-  await goto(`${BASE}/#/chapter/${CHAPTER}#${encodeURIComponent(anchorName)}`, 1900);
+  await goto(`${BASE}/learning.html#/chapter/${CHAPTER}#${encodeURIComponent(anchorName)}`, 1900);
   const r2 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     ${WAIT_ARTICLE}
@@ -308,7 +309,7 @@ try {
     '锚点已定位', `距顶 ${r2.top}px${r2.atBottom ? '（页面已到底）' : ''}`);
 
   /* ---------- 场景 3：点击正文标题旁的 # 锚点 ---------- */
-  await goto(`${BASE}/#/chapter/${CHAPTER}`);
+  await goto(`${BASE}/learning.html#/chapter/${CHAPTER}`);
   const r3 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     ${WAIT_ARTICLE}
@@ -331,7 +332,7 @@ try {
   check(r3.hash.includes('#/chapter/'), '地址栏更新为带锚点的章节路由', r3.hash.slice(0, 60));
 
   /* ---------- 场景 4：更新日志入口 ---------- */
-  await goto(`${BASE}/#/chapter/${CHAPTER}`);
+  await goto(`${BASE}/learning.html#/chapter/${CHAPTER}`);
   const r4 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     ${WAIT_ARTICLE}
@@ -367,7 +368,7 @@ try {
   check(r4.stillArticle, '关闭后仍在原章节，视图未被破坏');
 
   /* ---------- 场景 5：阅读设置 + 内容时效性标注 ---------- */
-  await goto(`${BASE}/#/chapter/c22`, 1800);   // c22 标记为快速变化章节
+  await goto(`${BASE}/learning.html#/chapter/c22`, 1800);   // c22 标记为快速变化章节
   const r5 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     ${WAIT_ARTICLE}
@@ -429,7 +430,7 @@ try {
   check(r5.noLegacyKey, '未再写入旧版全局存储键');
 
   /* ---------- 场景 6：用户管理后台 ---------- */
-  await goto(`${BASE}/#/`, 1400);
+  await goto(`${BASE}/learning.html#/`, 1400);
   const r6 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const out = {};
@@ -504,7 +505,7 @@ try {
   check(r6.closed, '面板可正常关闭');
 
   /* ---------- 场景 7：学习数据按账号隔离 ---------- */
-  await goto(`${BASE}/#/chapter/c01`, 1700);
+  await goto(`${BASE}/learning.html#/chapter/c01`, 1700);
   const r71 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     for (let i = 0; i < 80 && !document.querySelector('.article-body'); i++) await sleep(100);
@@ -537,7 +538,7 @@ try {
   const newUserOk = await login('e2e_user', 'E2e-Test-Pass-2026');
 
   // 用新账号在「另一章」标记完成，这样两边的进度应当互不相同
-  await goto(`${BASE}/#/chapter/c02`, 1800);
+  await goto(`${BASE}/learning.html#/chapter/c02`, 1800);
   const r73 = JSON.parse(await evaluate(`(async () => {
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     for (let i = 0; i < 80 && !document.querySelector('.article-body'); i++) await sleep(100);

@@ -38,7 +38,7 @@ function setBusy(busy) {
   const btn = $('#loginSubmit');
   if (!btn) return;
   btn.disabled = !!busy;
-  btn.textContent = busy ? '正在验证…' : '登录';
+  btn.textContent = busy ? '正在验证…' : (auth.needsSetup() ? '设置密码并启用' : '登录');
 }
 
 async function onLoginSubmit(e) {
@@ -57,7 +57,11 @@ async function onLoginSubmit(e) {
 
   let res;
   try {
-    res = await auth.login(username, password, { remember });
+    if (auth.needsSetup()) {
+      if(password !== $('#setupConfirm').value) { setBusy(false); showError('两次密码不一致'); return; }
+      res = await auth.setupAdmin(password);
+      if(res.ok) res = await auth.login('admin', password, { remember });
+    } else res = await auth.login(username, password, { remember });
   } catch (err) {
     setBusy(false);
     showError(`登录过程出错：${err.message}`);
@@ -83,6 +87,17 @@ function showGate() {
   const gate = $('#authGate');
   if (!gate) return;
   gate.hidden = false;
+  if(auth.needsSetup()) {
+    gate.querySelector('h1').textContent='初始化管理员';
+    $('#loginUser').value='admin'; $('#loginUser').readOnly=true;
+    $('#loginPass').autocomplete='new-password';
+    $('#loginSubmit').textContent='设置密码并启用';
+    if(!$('#setupConfirm')) {
+      const label=document.createElement('label'); label.className='field';
+      label.innerHTML='<span>确认管理员密码</span><input id="setupConfirm" type="password" autocomplete="new-password" required minlength="8" maxlength="128">';
+      $('#loginSubmit').before(label);
+    }
+  }
   const input = $('#loginUser');
   if (input) setTimeout(() => input.focus(), 60);
 }
@@ -178,16 +193,7 @@ async function doLogout() {
   location.reload();
 }
 
-function showSecurityNotice() {
-  window.alert(
-    '关于本平台的安全边界\n\n'
-    + '这是一个纯静态站点，没有服务端。它的「登录」属于访问控制，不是安全防护：\n\n'
-    + '· 网页里没有独立于你浏览器的数据存储，任何人都可以用开发者工具改变登录状态\n'
-    + '· 用户名单和密码哈希需要公开在仓库里，才能让其他人登录，因此可被离线爆破\n\n'
-    + '所以：请不要在这里使用你任何真实账号的密码。\n\n'
-    + '如果需要真正的账号安全与多设备数据同步，必须接入后端服务。'
-  );
-}
+function showSecurityNotice() { window.alert('账号信息保存在服务器 SQLite 数据库，密码仅存加盐哈希。学习进度和笔记仍保存在当前浏览器。'); }
 
 /* ============================================================
    账号设置
@@ -258,7 +264,7 @@ export function openAccount() {
       <span>新密码</span>
       <input type="password" id="acNewPw" autocomplete="new-password" />
       ${pwMeterHTML('acPwMeter')}
-      <span class="hint">至少 ${auth.MIN_PASSWORD} 位。修改后需导出 users.js 并提交，才会对其他设备生效。</span>
+      <span class="hint">至少 ${auth.MIN_PASSWORD} 位。修改后立即生效，所有设备需要重新登录。</span>
     </label>
     <label class="field">
       <span>确认新密码</span>
@@ -325,7 +331,7 @@ async function onAccountClick(e) {
       note: $('#acNote').value
     });
     if (!res.ok) { toast(res.error); return; }
-    toast('资料已保存（需导出 users.js 并提交后才对其他设备生效）');
+    toast('资料已保存到服务器');
     refreshUserMenu();
     return;
   }
@@ -344,7 +350,7 @@ async function onAccountClick(e) {
 
     if (!res.ok) { accountMsg(res.error); return; }
 
-    accountMsg('密码已修改。请到管理后台导出 users.js 并提交，否则刷新或换设备后仍会使用旧密码。', 'is-warn');
+    location.reload();
     $('#acOldPw').value = '';
     $('#acNewPw').value = '';
     $('#acNewPw2').value = '';

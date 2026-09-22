@@ -812,10 +812,17 @@ function bindGlobalEvents(annotate, search) {
 /* ============================================================
    启动
    ============================================================ */
-function boot() {
+async function boot() {
   /* ---------- 认证必须先于一切渲染 ----------
      未登录时不渲染任何学习内容、不建立搜索索引、不绑定应用事件。
      界面上只是一张登录卡片，DOM 里没有任何章节信息。 */
+  try { await auth.initialize(); } catch (error) {
+    initLogin().showGate();
+    document.querySelector('#loginError').textContent=error.message;
+    document.querySelector('#loginError').hidden=false;
+    document.querySelector('#loginSubmit').disabled=true;
+    return;
+  }
   auth.syncIfClean();     // 本机改动若已与仓库一致就丢弃覆盖层，避免长期遮蔽
 
   const login = initLogin({ onOpenAdmin: openAdmin });
@@ -823,7 +830,7 @@ function boot() {
 
   const user = auth.currentUser();
   if (!user) {
-    login.showGate();
+    location.replace(`./?next=${encodeURIComponent(location.pathname + location.hash)}`);
     return;
   }
 

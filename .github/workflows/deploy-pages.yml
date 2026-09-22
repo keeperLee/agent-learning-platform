@@ -1,80 +1,8 @@
-name: Deploy to GitHub Pages
-
-# 提交代码（push）后自动发布到 GitHub Pages
-# 流程：校验内容 → 校验通过才上传产物 → 发布
-# 校验失败时不会部署，线上保持上一个可用版本
+name: Server deployment required
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# 同一时间只允许一次部署；不取消进行中的发布，避免线上出现半成品
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
-  # ---------- 第一道关卡：内容校验 ----------
-  validate:
-    name: 校验内容
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: 内容与结构校验
-        run: node scripts/validate.mjs
-
-  # ---------- 第二道关卡：构建产物 ----------
-  build:
-    name: 构建产物
-    needs: validate
+  notice:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: 检查部署必需文件
-        run: |
-          set -e
-          test -f .nojekyll || { echo "缺少 .nojekyll：Jekyll 会处理 content/*.md，导致线上 fetch 取不到原始 Markdown"; exit 1; }
-          test -f index.html || { echo "缺少 index.html"; exit 1; }
-          test -d content/chapters || { echo "缺少章节目录"; exit 1; }
-          # 用户名单缺失会导致 window.USER_DIRECTORY 为 undefined，任何人都无法登录
-          test -f content/users.js || { echo "缺少 content/users.js：没有它就无法生成登录校验，所有人都进不来"; exit 1; }
-
-      # 纯静态站点，无需构建步骤，直接上传仓库根目录
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-  # ---------- 第三道关卡：发布 ----------
-  deploy:
-    name: 发布到 Pages
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: 输出访问地址
-        run: echo "已发布 → ${{ steps.deployment.outputs.page_url }}"
+      - run: echo "SQLite authentication requires a Node server and persistent disk. GitHub Pages publishing is disabled."

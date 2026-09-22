@@ -1,108 +1,41 @@
-#!/usr/bin/env node
-/* ============================================================
-   零依赖静态服务器（本地开发 / CI 冒烟测试）
-   用法：node scripts/serve.mjs [端口]
-   ============================================================ */
-
-import { createServer } from 'http';
-import { readFile, stat } from 'fs/promises';
-import { extname, join, resolve, sep } from 'path';
-import { fileURLToPath } from 'url';
-
-const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const PORT = Number(process.env.PORT || process.argv[2] || 5173);
-const HOST = process.env.HOST || '127.0.0.1';
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.md': 'text/markdown; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8'
-};
-
-function safePath(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split('?')[0].split('#')[0]);
-  const target = resolve(join(ROOT, decoded));
-  // 防目录穿越
-  if (target !== ROOT && !target.startsWith(ROOT + sep)) return null;
-  return target;
-}
-
-const server = createServer(async (req, res) => {
-  const started = Date.now();
-  let target = safePath(req.url || '/');
-
-  if (!target) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('403 Forbidden');
-    return;
-  }
-
+import { createServer } from 'node:http';
+import { readFile, realpath } from 'node:fs/promises';
+import { resolve, extname, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createAuth } from '../server/auth.mjs';
+const ROOT=fileURLToPath(new URL('..',import.meta.url));
+const HOST=process.env.HOST||'127.0.0.1', PORT=Number(process.env.PORT||process.argv[2]||5173);
+const auth=createAuth(resolve(process.env.DB_PATH||resolve(ROOT,'data/app.sqlite')));
+const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.md':'text/markdown','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.woff2':'font/woff2'};
+const server=createServer(async(req,res)=>{
+  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');
+  const json=(status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(obj));};
   try {
-    let info = await stat(target).catch(() => null);
-    if (info?.isDirectory()) {
-      target = join(target, 'index.html');
-      info = await stat(target).catch(() => null);
+    const expected=process.env.PUBLIC_ORIGIN||`http://${HOST}:${PORT}`;
+    if(req.headers.host!==new URL(expected).host) return json(403,{ok:false,error:'Host 不受信任'});
+    const path=decodeURIComponent(new URL(req.url,expected).pathname);
+    if(path.startsWith('/api/')) {
+      let body={};
+      if(req.method==='POST') {
+        if(req.headers.origin!==expected || req.headers['content-type']!=='application/json')return json(403,{ok:false,error:'请求来源不受信任'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>16384)return json(413,{ok:false,error:'请求过大'});}body=JSON.parse(raw||'{}');
+        if(!body||typeof body!=='object'||Array.isArray(body))return json(400,{ok:false,error:'请求格式不正确'});
+      }
+      return json(200,await auth.handle(req,res,path,body));
     }
-
-    if (!info?.isFile()) {
-      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`<!DOCTYPE html><meta charset="utf-8"><title>404</title>
-<body style="font:15px/1.7 system-ui;padding:48px;max-width:60ch">
-<h1 style="margin:0 0 8px">404 Not Found</h1>
-<p style="color:#666">${decodeURIComponent(req.url || '/')}</p>
-<p><a href="/">← 返回首页</a></p>`);
-      log(req, 404, started);
-      return;
+    if((path==='/learning.html'||path.startsWith('/projects/'))&&!auth.session(req)) {
+      res.writeHead(302,{Location:`/?next=${encodeURIComponent(path)}`});res.end();return;
     }
-
-    const body = await readFile(target);
-    res.writeHead(200, {
-      'Content-Type': MIME[extname(target).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Content-Length': body.length
-    });
-    res.end(body);
-    log(req, 200, started);
-  } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('500 ' + err.message);
-    log(req, 500, started);
-  }
+    if(path==='/content/projects.js'&&!auth.session(req))return json(401,{error:'请先登录'});
+    if(!['GET','HEAD'].includes(req.method))return json(405,{error:'Method not allowed'});
+    const allowed=/^\/projects\/[a-zA-Z0-9_/-]+\.(html|js|css|svg|png|jpg|json|woff2)$/.test(path)||path==='/'||path==='/index.html'||path==='/learning.html'||/^\/assets\/[a-zA-Z0-9_./-]+$/.test(path)||['/content/projects.js','/content/catalog.js','/content/changelog.js'].includes(path)||/^\/content\/chapters\/c\d+\.md$/.test(path);
+    if(!allowed||path.split('/').some(s=>s.startsWith('.')))return json(404,{error:'Not found'});
+    if(path.startsWith('/content/chapters/')&&!auth.session(req))return json(401,{error:'请先登录'});
+    const requested=resolve(ROOT,'.'+(path==='/'?'/index.html':path));
+    const file=await realpath(requested);
+    if(file!==requested)return json(404,{error:'Not found'});
+    if(!file.startsWith(ROOT+sep)&&!file.startsWith(ROOT.endsWith(sep)?ROOT:ROOT+sep))return json(404,{error:'Not found'});
+    const data=await readFile(file);res.writeHead(200,{'Content-Type':`${mime[extname(file)]||'application/octet-stream'}; charset=utf-8`});res.end(req.method==='HEAD'?undefined:data);
+  }catch(e){json(e.status|| (e.code==='ENOENT'?404:400),{ok:false,error:e.status?e.message:'请求失败'});}
 });
-
-function log(req, code, started) {
-  if (process.env.QUIET) return;
-  const mark = code >= 400 ? '\u001b[31m' : '\u001b[32m';
-  const reset = process.stdout.isTTY ? '\u001b[0m' : '';
-  const color = process.stdout.isTTY ? mark : '';
-  console.log(`  ${color}${code}${reset}  ${Date.now() - started}ms  ${req.method} ${req.url}`);
-}
-
-server.listen(PORT, HOST, () => {
-  console.log('');
-  console.log('  Agent 学习平台 · 本地服务已启动');
-  console.log(`  →  http://${HOST}:${PORT}/`);
-  console.log('  Ctrl + C 停止');
-  console.log('');
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`\n  端口 ${PORT} 已被占用。请换一个端口：node scripts/serve.mjs 5174\n`);
-  } else {
-    console.error('\n  服务启动失败：', err.message, '\n');
-  }
-  process.exit(1);
-});
+server.listen(PORT,HOST,()=>console.log(`项目门户：http://${HOST}:${PORT}/（SQLite 认证；首次请进入学习平台初始化 admin）`));
