@@ -1,4 +1,4 @@
-name: Redirect to JianSpace
+name: Redirect to AI Space
 on:
   push:
     branches: [main]
@@ -25,7 +25,7 @@ jobs:
         run: |
           mkdir -p dist
           cat > dist/index.html <<'HTML'
-          <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=https://keeperlee.github.io/jian-space/"><meta name="viewport" content="width=device-width,initial-scale=1"><title>项目入口已迁移 · JianSpace</title></head><body><p>项目入口已迁移至 <a href="https://keeperlee.github.io/jian-space/">JianSpace 简空间</a>。Agent 学习平台仍在原仓库独立维护。</p></body></html>
+          <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=https://keeperlee.github.io/ai-space/"><meta name="viewport" content="width=device-width,initial-scale=1"><title>项目入口已迁移 · AI Space</title></head><body><p>项目入口已迁移至 <a href="https://keeperlee.github.io/ai-space/">AI Space</a>。Agent 学习平台仍在原仓库独立维护。</p></body></html>
           HTML
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
