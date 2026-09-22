@@ -1,8 +1,36 @@
-name: Server deployment required
+name: Redirect to JianSpace
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
 jobs:
-  notice:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - run: echo "SQLite authentication requires a Node server and persistent disk. GitHub Pages publishing is disabled."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build migration redirect
+        run: |
+          mkdir -p dist
+          cat > dist/index.html <<'HTML'
+          <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=https://keeperlee.github.io/jian-space/"><meta name="viewport" content="width=device-width,initial-scale=1"><title>项目入口已迁移 · JianSpace</title></head><body><p>项目入口已迁移至 <a href="https://keeperlee.github.io/jian-space/">JianSpace 简空间</a>。Agent 学习平台仍在原仓库独立维护。</p></body></html>
+          HTML
+          touch dist/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
