@@ -3,12 +3,15 @@
    ============================================================ */
 
 import * as store from './store.js';
+import * as auth from './auth.js';
 import { $, $$, esc, toast, throttle, copyText } from './ui.js';
 import { renderMarkdown } from './markdown.js';
 import { mountDemos } from './demos.js';
 import { loadChapter } from './content.js';
 import { initSearch, buildIndex } from './search.js';
 import { initAnnotate, applyHighlights } from './annotate.js';
+import { initLogin, dismissBoot } from './login.js';
+import { initAdmin, openAdmin } from './admin.js';
 
 const CAT = window.CATALOG;
 const TAG_LABEL = { basic: '基础', mid: '核心', adv: '架构', lab: '实验', ref: '参考' };
@@ -810,6 +813,26 @@ function bindGlobalEvents(annotate, search) {
    启动
    ============================================================ */
 function boot() {
+  /* ---------- 认证必须先于一切渲染 ----------
+     未登录时不渲染任何学习内容、不建立搜索索引、不绑定应用事件。
+     界面上只是一张登录卡片，DOM 里没有任何章节信息。 */
+  auth.syncIfClean();     // 本机改动若已与仓库一致就丢弃覆盖层，避免长期遮蔽
+
+  const login = initLogin({ onOpenAdmin: openAdmin });
+  initAdmin();
+
+  const user = auth.currentUser();
+  if (!user) {
+    login.showGate();
+    return;
+  }
+
+  // 学习数据按账号隔离，必须在读取任何进度之前切好命名空间
+  store.setNamespace(auth.namespaceOf(user));
+
+  dismissBoot();
+  login.refreshUserMenu();
+
   store.applyTheme();
   applyReader();          // 阅读设置要在首次渲染前生效，避免闪一下默认字号
   renderPathSwitch();

@@ -32,10 +32,15 @@ const ok = (scope, msg) => group.push({ scope, msg, level: 'ok' });
 const REQUIRED = [
   'index.html', 'README.md', '.nojekyll',
   'assets/css/main.css', 'assets/css/components.css', 'assets/css/reader.css',
+  'assets/css/auth.css',
   'assets/js/app.js', 'assets/js/store.js', 'assets/js/markdown.js',
   'assets/js/highlight.js', 'assets/js/diagrams.js', 'assets/js/demos.js',
   'assets/js/search.js', 'assets/js/annotate.js', 'assets/js/content.js',
-  'assets/js/ui.js', 'content/catalog.js', 'content/changelog.js'
+  'assets/js/ui.js', 'content/catalog.js', 'content/changelog.js',
+  // 认证相关：用户目录是登录的唯一依据，缺任何一个都会导致无法登录
+  'assets/js/crypto.js', 'assets/js/userdir.js', 'assets/js/auth.js',
+  'assets/js/login.js', 'assets/js/admin.js',
+  'content/users.js', 'scripts/user.mjs'
 ];
 
 for (const f of REQUIRED) {
@@ -54,8 +59,10 @@ if (!existsSync(P('.nojekyll'))) {
 globalThis.window = globalThis;
 await import(pathToFileURL(P('content/catalog.js')).href);
 await import(pathToFileURL(P('content/changelog.js')).href);
+await import(pathToFileURL(P('content/users.js')).href);
 const CAT = globalThis.CATALOG;
 const CL = globalThis.CHANGELOG;
+const UD = globalThis.USER_DIRECTORY;
 
 if (!CAT || !Array.isArray(CAT.modules)) {
   console.error('无法加载 content/catalog.js 中的 window.CATALOG');
@@ -66,6 +73,8 @@ const { renderMarkdown, toPlainText } = await import(pathToFileURL(P('assets/js/
 const { normalizeLang } = await import(pathToFileURL(P('assets/js/highlight.js')).href);
 const { DEMOS } = await import(pathToFileURL(P('assets/js/demos.js')).href);
 const { DIAGRAM_NAMES } = await import(pathToFileURL(P('assets/js/diagrams.js')).href);
+const { sha256Hex, hashPassword } = await import(pathToFileURL(P('assets/js/crypto.js')).href);
+const { serializeDirectory } = await import(pathToFileURL(P('assets/js/userdir.js')).href);
 
 const DEMO_NAMES = new Set(Object.keys(DEMOS));
 const DIAGRAM_SET = new Set(DIAGRAM_NAMES);
@@ -312,7 +321,13 @@ const MOUNTS = [
   'viewRoot', 'chapterNav', 'tocInner', 'searchInput', 'drawerBody',
   'selectionBar', 'toastWrap', 'readingProgress',
   'changelogOverlay', 'changelogBody', 'changelogToggle', 'versionText',
-  'readerBtn', 'readerPanel', 'readerBody'
+  'readerBtn', 'readerPanel', 'readerBody',
+  // 认证：少一个都会让登录或用户管理直接失效
+  'bootLoader', 'authGate', 'loginForm', 'loginUser', 'loginPass',
+  'loginRemember', 'loginSubmit', 'loginError',
+  'userBtn', 'userAvatar', 'userPendingDot', 'userMenu',
+  'accountOverlay', 'accountBody',
+  'adminOverlay', 'adminBody', 'adminSub'
 ];
 for (const id of MOUNTS) {
   if (!indexHtml.includes(`id="${id}"`)) fail('index.html', `缺少脚本依赖的挂载点 #${id}`);
@@ -380,6 +395,117 @@ if (!CL || !Array.isArray(CL.entries) || CL.entries.length === 0) {
 {
   const volatile = chapters.filter((c) => c.volatile);
   ok('时效性', `基准时间 ${CAT.DEFAULT_UPDATED}，其中 ${volatile.length} 章标记为快速变化：${volatile.map((c) => c.id).join('、') || '无'}`);
+}
+
+/* ============================================================
+   7.5 密码哈希算法自检
+   ------------------------------------------------------------
+   这组「已知答案测试」的价值不在于验证 SHA-256 实现对不对，
+   而在于**锁死哈希算法**：一旦有人改了轮次混入方式、盐的位置
+   或编码，下面这条 KAT 立刻失配 —— 那意味着线上所有已存在的
+   密码都会验证失败，是必须拦住的事故。
+   ============================================================ */
+{
+  const SHA_VECTORS = [
+    ['', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'],
+    ['abc', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'],
+    ['abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',
+      '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1']
+  ];
+  let shaBad = 0;
+  for (const [input, expected] of SHA_VECTORS) {
+    if (sha256Hex(input) !== expected) {
+      fail('密码哈希', `SHA-256 标准向量失配：输入「${input.slice(0, 20)}」`);
+      shaBad++;
+    }
+  }
+
+  // 迭代哈希的已知答案：改动算法会让这一条失配
+  const KAT = 'c669119b1d3d9e737e4412fbb6bb02e1f18efc99d150b5f5ad3669eb32aefa51';
+  const got = hashPassword('test-password', 'fixed-salt-for-ci', 1000);
+  if (got !== KAT) {
+    fail('密码哈希',
+      '迭代哈希算法已变更（KAT 失配）。这会导致所有已存在账号的密码失效，'
+      + '如果确实要换算法，必须同时为所有用户重置密码。\n'
+      + `      期望 ${KAT}\n      实际 ${got}`);
+  }
+
+  if (!shaBad && got === KAT) ok('密码哈希', 'SHA-256 标准向量与迭代哈希 KAT 全部通过（算法已锁定）');
+}
+
+/* ============================================================
+   7.6 用户目录
+   ============================================================ */
+if (!UD || !Array.isArray(UD.users)) {
+  fail('用户目录', 'content/users.js 未导出有效的 window.USER_DIRECTORY.users');
+} else {
+  const seen = new Set();
+  let activeAdmins = 0;
+  const FORBIDDEN = ['password', 'passwd', 'pwd', 'plain', 'plainPassword', 'rawPassword', 'secret'];
+
+  UD.users.forEach((u, i) => {
+    const name = String(u.username || '');
+    const w = `账号 ${name || `#${i + 1}`}`;
+
+    if (!name) fail('用户目录', `${w} 缺少 username`);
+    else if (!/^[a-z0-9_]{3,24}$/.test(name)) {
+      fail('用户目录', `${w} 的 username 非法（只允许小写字母、数字、下划线，3~24 位）`);
+    }
+    if (name) {
+      if (seen.has(name)) fail('用户目录', `登录名重复：${name}`);
+      seen.add(name);
+    }
+
+    if (!u.displayName) fail('用户目录', `${w} 缺少 displayName`);
+    if (!['admin', 'member'].includes(u.role)) fail('用户目录', `${w} 的 role 非法：${u.role}`);
+    if (typeof u.active !== 'boolean') fail('用户目录', `${w} 的 active 必须是布尔值`);
+    if (u.active === true && u.role === 'admin') activeAdmins++;
+
+    // 明文字段检测：这个文件会被提交并且公开
+    for (const k of Object.keys(u)) {
+      if (FORBIDDEN.includes(k)) {
+        fail('用户目录', `${w} 出现了明文字段「${k}」。该文件会被提交到仓库并公开，绝不能存放明文密码`);
+      }
+    }
+
+    const c = u.credential;
+    if (!c || typeof c !== 'object') {
+      fail('用户目录', `${w} 缺少 credential`);
+    } else {
+      if (!c.salt || !/^[0-9a-f]{16,}$/i.test(String(c.salt))) {
+        fail('用户目录', `${w} 的 salt 缺失或格式异常（应为 16 位以上的十六进制）`);
+      }
+      if (!c.hash || !/^[0-9a-f]{64}$/i.test(String(c.hash))) {
+        fail('用户目录', `${w} 的 hash 必须是 64 位十六进制（SHA-256 输出）`);
+      }
+      if (!Number.isInteger(c.iterations) || c.iterations < 1) {
+        fail('用户目录', `${w} 的 iterations 必须是正整数`);
+      } else if (c.iterations < 1000) {
+        warn('用户目录', `${w} 的迭代次数偏低（${c.iterations}），建议不低于 1000`);
+      }
+    }
+
+    if (u.createdAt && !/^\d{4}-\d{2}-\d{2}$/.test(String(u.createdAt))) {
+      warn('用户目录', `${w} 的 createdAt 不是 YYYY-MM-DD 格式：${u.createdAt}`);
+    }
+  });
+
+  if (UD.users.length === 0) fail('用户目录', '名单为空 —— 将没有任何人能登录');
+  if (activeAdmins === 0) fail('用户目录', '没有任何启用的管理员 —— 将无法再通过界面管理用户');
+
+  // 序列化是否规范：手工编辑容易破坏格式，下次导出会整体重排
+  try {
+    const canonical = readFileSync(P('content/users.js'), 'utf8');
+    const generated = serializeDirectory(UD.users, { generatedAt: '<ignored>' });
+    const strip = (s) => s.replace(/^.{0,4}导出时间 .*$/m, '').replace(/\r/g, '').trim();
+    if (strip(canonical) !== strip(generated)) {
+      warn('用户目录', 'content/users.js 的格式与管理后台导出不完全一致（手工编辑过？）。功能不受影响，下次导出会重排格式');
+    }
+  } catch (_) { /* 格式比对失败不影响校验结论 */ }
+
+  if (activeAdmins > 0 && UD.users.length > 0) {
+    ok('用户目录', `${UD.users.length} 个账号（${activeAdmins} 个启用管理员），凭据格式全部合法`);
+  }
 }
 
 /* ============================================================

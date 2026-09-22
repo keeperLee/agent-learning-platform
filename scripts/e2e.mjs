@@ -7,10 +7,17 @@
    可用 CHROME_PATH 指定浏览器可执行文件路径。
 
    覆盖的回归点：
+   ⓪ 未登录时不得泄露任何学习内容；错误密码不得放行
    ① 点击右侧「本篇目录」应就地滚动，不能跳回首页
    ② 目录链接必须是完整路由，保证中键 / 复制链接可用
    ③ 直接打开带锚点的深链接应正确定位
    ④ 点击正文标题旁的 # 锚点应就地滚动
+   ⑤ 阅读设置即时生效并持久化（存储键必须带用户命名空间）
+   ⑥ 用户管理：列表、注册、未发布提示、丢弃本机改动
+   ⑦ 学习数据按账号隔离，互不串扰
+
+   ⚠️ 这个脚本会用到内置的初始管理员账号（见 content/users.js）。
+      它只在临时的浏览器 profile 里操作，不会修改仓库里的用户名单。
    ============================================================ */
 
 import { spawn } from 'child_process';
@@ -121,6 +128,65 @@ async function goto(url, waitMs = 1500) {
   await sleep(waitMs);
 }
 
+/* ---------------- 登录辅助 ----------------
+   登录状态存在 localStorage，而每次测试都用全新的 user-data-dir，
+   所以每个场景开始前都需要先登录。 */
+const ADMIN_USER = process.env.E2E_USER || 'lijian';
+const ADMIN_PASS = process.env.E2E_PASS || '1qaz2wsx';
+
+/** 提交登录表单（不等待结果） */
+async function fillLogin(username, password) {
+  return JSON.parse(await evaluate(`(() => {
+    const form = document.getElementById('loginForm');
+    if (!form) return JSON.stringify({ error: '页面上找不到登录表单' });
+    const gate = document.getElementById('authGate');
+    document.getElementById('loginUser').value = ${JSON.stringify(username)};
+    document.getElementById('loginPass').value = ${JSON.stringify(password)};
+    document.getElementById('loginRemember').checked = true;
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    return JSON.stringify({ hadGate: !!gate && !gate.hidden });
+  })()`));
+}
+
+/** 等待登录后的整页重载完成、应用外壳出现 */
+async function waitForApp(timeoutMs = 8000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const s = JSON.parse(await evaluate(`(() => {
+      const gate = document.getElementById('authGate');
+      const topbar = document.querySelector('.topbar');
+      const view = document.getElementById('viewRoot');
+      return JSON.stringify({
+        // 用计算样式而不是 hidden 属性：曾出现过 .auth-gate 的 display:flex
+        // 盖过 [hidden]{display:none}，属性是 hidden 但实际仍然盖在页面上
+        gateVisible: !!gate && getComputedStyle(gate).display !== 'none',
+        // 首页与章节页都算就绪：顶栏可见 且 主内容区已渲染
+        appReady: !!topbar && getComputedStyle(topbar).display !== 'none'
+          && !!view && view.children.length > 0,
+        loader: !!document.getElementById('bootLoader')
+      });
+    })()`));
+    if (s.appReady && !s.gateVisible && !s.loader) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+async function login(username, password) {
+  await fillLogin(username, password);
+  return waitForApp();
+}
+
+/** 关掉 confirm / alert / prompt，否则无头浏览器会卡在对话框上 */
+async function stubDialogs() {
+  await evaluate(`(() => {
+    window.confirm = () => true;
+    window.alert = () => {};
+    window.prompt = (msg, def) => (def === undefined ? 'Xx-Reset-Pass-2026' : def);
+    return 'ok';
+  })()`);
+}
+
 const WAIT_ARTICLE = `
   for (let i = 0; i < 80 && !document.querySelector('.article-body'); i++) await sleep(100);
 `;
@@ -130,6 +196,62 @@ console.log(paint(`  浏览器交互回归测试 · ${BASE} · 章节 ${CHAPTER}
 console.log(paint('  ' + '─'.repeat(58), C.dim));
 
 try {
+  /* ---------- 场景 0：登录门禁 ---------- */
+  await goto(`${BASE}/`, 1800);
+  const r0 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    const gate = document.getElementById('authGate');
+    const topbar = document.querySelector('.topbar');
+    out.gateVisible = !!gate && getComputedStyle(gate).display !== 'none';
+    out.topbarHidden = !!topbar && getComputedStyle(topbar).display === 'none';
+    out.noArticle = !document.querySelector('.article-body');
+    out.noHero = !document.querySelector('.hero');
+    out.noCatalogDom = !document.querySelector('#chapterNav .nav-module');
+    out.loaderGone = !document.getElementById('bootLoader');
+
+    document.getElementById('loginUser').value = ${JSON.stringify(ADMIN_USER)};
+    document.getElementById('loginPass').value = 'definitely-wrong-password-2026';
+    document.getElementById('loginForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    await sleep(1000);
+
+    const errBox = document.getElementById('loginError');
+    out.errShown = !!errBox && !errBox.hidden && errBox.textContent.trim().length > 0;
+    out.errText = errBox ? errBox.textContent.trim() : '';
+    out.stillGate = getComputedStyle(document.getElementById('authGate')).display !== 'none';
+    out.stillNoContent = !document.querySelector('.hero') && !document.querySelector('.article-body');
+    out.passCleared = document.getElementById('loginPass').value === '';
+    return JSON.stringify(out);
+  })()`));
+
+  console.log('');
+  console.log('  场景 0 · 登录门禁（未登录不得泄露任何内容）');
+  check(r0.gateVisible, '未登录时显示登录卡片');
+  check(r0.topbarHidden, '顶栏与侧边栏整体隐藏');
+  check(r0.noArticle && r0.noHero, 'DOM 中不存在任何学习内容');
+  check(r0.noCatalogDom, '章节树未渲染');
+  check(r0.loaderGone, '启动占位已移除，不会卡在「正在检查登录状态」');
+  check(r0.errShown, '错误密码被拒绝并给出提示', r0.errText.slice(0, 24));
+  check(r0.stillGate && r0.stillNoContent, '密码错误后仍停在门禁，未放行');
+  check(r0.passCleared, '校验失败后密码输入框已清空');
+
+  /* ---------- 登录，后续场景都在登录态下进行 ---------- */
+  const loggedIn = await login(ADMIN_USER, ADMIN_PASS);
+  check(loggedIn, '正确密码登录成功，应用外壳已启动');
+
+  const r0b = JSON.parse(await evaluate(`(() => {
+    const gate = document.getElementById('authGate');
+    const topbar = document.querySelector('.topbar');
+    return JSON.stringify({
+      gateDisplay: getComputedStyle(gate).display,
+      topbarDisplay: getComputedStyle(topbar).display,
+      locked: document.body.classList.contains('is-locked'),
+      pending: document.documentElement.classList.contains('auth-pending')
+    });
+  })()`));
+  check(r0b.gateDisplay === 'none', '登录后门禁真正从渲染树中移除（非仅设置 hidden 属性）', `display=${r0b.gateDisplay}`);
+  check(r0b.topbarDisplay !== 'none' && !r0b.locked && !r0b.pending, '应用外壳已解除锁定并可见');
+
   /* ---------- 场景 1：点击右侧「本篇目录」 ---------- */
   await goto(`${BASE}/#/chapter/${CHAPTER}`);
   const r1 = JSON.parse(await evaluate(`(async () => {
@@ -274,7 +396,11 @@ try {
     await sleep(150);
     out.lhVar = document.documentElement.style.getPropertyValue('--reader-lh');
 
-    out.persisted = JSON.parse(localStorage.getItem('agent-learning-platform:v1') || '{}')?.reader?.scale || null;
+    // 存储键现在带用户命名空间，动态定位而不是写死
+    const key = Object.keys(localStorage).find(k => /^agent-learning-platform:u:.+:v1$/.test(k));
+    out.storageKey = key || null;
+    out.persisted = JSON.parse(localStorage.getItem(key) || '{}')?.reader?.scale || null;
+    out.noLegacyKey = !Object.keys(localStorage).includes('agent-learning-platform:v1');
 
     document.querySelector('[data-reader-reset]').click();
     await sleep(200);
@@ -299,6 +425,153 @@ try {
   check(r5.persisted === 'xl', '设置已持久化到本地');
   check(r5.fsAfterReset === r5.fsBefore, '恢复默认生效', `回到 ${r5.fsAfterReset}`);
   check(r5.panelClosed && r5.stillArticle, '面板可关闭且不影响阅读');
+  check(!!r5.storageKey && /:u:.+:v1$/.test(r5.storageKey), '设置写入按用户隔离的存储键', String(r5.storageKey));
+  check(r5.noLegacyKey, '未再写入旧版全局存储键');
+
+  /* ---------- 场景 6：用户管理后台 ---------- */
+  await goto(`${BASE}/#/`, 1400);
+  const r6 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    const rows = () => [...document.querySelectorAll('#adminBody .admin-table tbody tr')];
+
+    document.getElementById('userBtn').click();
+    await sleep(260);
+    out.menuOpen = !document.getElementById('userMenu').hidden;
+    out.menuText = document.getElementById('userMenu').textContent.replace(/\\s+/g, ' ').trim();
+    out.hasAccountEntry = !!document.querySelector('#userMenu [data-um="account"]');
+    out.hasAdminEntry = !!document.querySelector('#userMenu [data-um="admin"]');
+
+    document.querySelector('#userMenu [data-um="admin"]').click();
+    await sleep(480);
+    out.opened = !document.getElementById('adminOverlay').hidden;
+    out.rowsBefore = rows().length;
+    out.hasAdminUser = rows().some(r => r.textContent.includes(${JSON.stringify(ADMIN_USER)}));
+    out.adminTag = (document.querySelector('#adminBody .tag-admin')?.textContent || '').trim();
+    out.cleanNotice = !!document.querySelector('#adminBody .admin-note.is-clean');
+
+    const register = async () => {
+      document.querySelector('#adminBody [data-adm="toggle-form"]').click();
+      await sleep(220);
+      document.getElementById('nuUser').value = 'e2e_user';
+      document.getElementById('nuName').value = '测试用户';
+      document.getElementById('nuPw').value = 'E2e-Test-Pass-2026';
+      document.querySelector('#adminBody [data-adm="create"]').click();
+      await sleep(900);
+    };
+
+    await register();
+    out.rowsAfter = rows().length;
+    out.hasNewUser = rows().some(r => r.textContent.includes('e2e_user'));
+    const pend = document.querySelector('#adminBody .admin-note:not(.is-clean)');
+    out.pendingNotice = !!pend;
+    out.pendingText = pend ? pend.textContent.replace(/\\s+/g, ' ').trim().slice(0, 40) : '';
+    out.hasExportBtn = !!document.querySelector('#adminBody [data-adm="export-file"]');
+    out.dotVisible = !document.getElementById('userPendingDot').hidden;
+
+    // 丢弃本机改动 → 回到仓库名单
+    window.confirm = () => true;
+    document.querySelector('#adminBody [data-adm="discard"]').click();
+    await sleep(800);
+    out.rowsAfterDiscard = rows().length;
+    out.cleanAfterDiscard = !!document.querySelector('#adminBody .admin-note.is-clean');
+    out.dotAfterDiscard = !document.getElementById('userPendingDot').hidden;
+
+    // 再注册一次，供场景 7 使用
+    await register();
+    out.rowsFinal = rows().length;
+
+    document.querySelector('#adminOverlay [data-close]').click();
+    await sleep(260);
+    out.closed = document.getElementById('adminOverlay').hidden;
+    return JSON.stringify(out);
+  })()`));
+
+  console.log('');
+  console.log('  场景 6 · 用户管理后台');
+  check(r6.menuOpen, '点击头像打开账号菜单');
+  check(r6.menuText.includes(ADMIN_USER), '菜单显示当前账号', r6.menuText.slice(0, 44));
+  check(r6.hasAccountEntry && r6.hasAdminEntry, '管理员可见「账号设置」与「用户管理」');
+  check(r6.opened, '打开用户管理面板');
+  check(r6.rowsBefore >= 1 && r6.hasAdminUser, `列出 ${r6.rowsBefore} 个账号，含初始管理员`);
+  check(r6.adminTag === '管理员', '角色标签正确', r6.adminTag);
+  check(r6.cleanNotice, '无改动时提示「与仓库一致」');
+  check(r6.hasNewUser && r6.rowsAfter === r6.rowsBefore + 1, `注册后新增一行（${r6.rowsBefore} → ${r6.rowsAfter}）`);
+  check(r6.pendingNotice && r6.hasExportBtn, '出现「未发布」提示与导出入口', r6.pendingText.slice(0, 26));
+  check(r6.dotVisible, '顶栏头像出现未发布提示点');
+  check(r6.rowsAfterDiscard === r6.rowsBefore && r6.cleanAfterDiscard, '丢弃本机改动后回到仓库名单');
+  check(!r6.dotAfterDiscard, '丢弃后提示点消失');
+  check(r6.closed, '面板可正常关闭');
+
+  /* ---------- 场景 7：学习数据按账号隔离 ---------- */
+  await goto(`${BASE}/#/chapter/c01`, 1700);
+  const r71 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 80 && !document.querySelector('.article-body'); i++) await sleep(100);
+    document.querySelector('[data-mark-done]').click();
+    await sleep(600);
+    const k = Object.keys(localStorage).find(k => k.includes(':u:${ADMIN_USER}:'));
+    const d = JSON.parse(localStorage.getItem(k) || '{}');
+    return JSON.stringify({
+      key: k || null,
+      c01: (d.progress && d.progress.c01 && d.progress.c01.state) || null
+    });
+  })()`));
+
+  await stubDialogs();
+  await evaluate(`document.getElementById('userBtn').click()`);
+  await sleep(260);
+  await evaluate(`document.querySelector('#userMenu [data-um="logout"]').click()`);
+  await sleep(2400);
+  const r72 = JSON.parse(await evaluate(`(() => {
+    const gate = document.getElementById('authGate');
+    const topbar = document.querySelector('.topbar');
+    return JSON.stringify({
+      gateVisible: !!gate && getComputedStyle(gate).display !== 'none',
+      topbarHidden: !!topbar && getComputedStyle(topbar).display === 'none',
+      noContent: !document.querySelector('.article-body') && !document.querySelector('.hero'),
+      sessionGone: !Object.keys(localStorage).some(k => k.includes('session'))
+    });
+  })()`));
+
+  const newUserOk = await login('e2e_user', 'E2e-Test-Pass-2026');
+
+  // 用新账号在「另一章」标记完成，这样两边的进度应当互不相同
+  await goto(`${BASE}/#/chapter/c02`, 1800);
+  const r73 = JSON.parse(await evaluate(`(async () => {
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 80 && !document.querySelector('.article-body'); i++) await sleep(100);
+    const doneBtnBefore = !!document.querySelector('[data-mark-done]');
+    document.querySelector('[data-mark-done]').click();
+    await sleep(900);
+    const nk = Object.keys(localStorage).find(k => /:u:e2e_user:v1$/.test(k));
+    const lk = Object.keys(localStorage).find(k => /:u:${ADMIN_USER}:v1$/.test(k));
+    const nd = nk ? JSON.parse(localStorage.getItem(nk) || '{}') : {};
+    const ld = lk ? JSON.parse(localStorage.getItem(lk) || '{}') : {};
+    const doneOf = (d) => Object.entries(d.progress || {})
+      .filter(([, p]) => p.state === 'done').map(([id]) => id).sort();
+    return JSON.stringify({
+      doneBtnBefore,
+      newKey: nk || null,
+      adminKey: lk || null,
+      newDoneList: doneOf(nd),
+      adminDoneList: doneOf(ld),
+      newNotes: (nd.notes || []).length,
+      distinctKeys: !!nk && !!lk && nk !== lk
+    });
+  })()`));
+
+  console.log('');
+  console.log('  场景 7 · 学习数据按账号隔离');
+  check(!!r71.key && r71.c01 === 'done', '管理员名下已记录完成进度', String(r71.key));
+  check(r72.gateVisible && r72.topbarHidden, '退出后回到登录门禁');
+  check(r72.noContent, '退出后页面上不再残留学习内容');
+  check(r72.sessionGone, '会话已清除');
+  check(newUserOk, '新账号可登录（本机改动即时生效，尚未推送到仓库）');
+  check(r73.distinctKeys, '两个账号使用各自独立的存储命名空间', `${r73.adminKey} ≠ ${r73.newKey}`);
+  check(JSON.stringify(r73.newDoneList) === '["c02"]', '新账号的完成记录只落在自己名下', JSON.stringify(r73.newDoneList));
+  check(JSON.stringify(r73.adminDoneList) === '["c01"]', '管理员的数据未被新账号改动', JSON.stringify(r73.adminDoneList));
+  check(r73.newNotes === 0, '新账号没有继承管理员的笔记');
 } catch (err) {
   failed++;
   console.log('');

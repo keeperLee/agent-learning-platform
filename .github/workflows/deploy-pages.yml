@@ -54,6 +54,8 @@ jobs:
           test -f .nojekyll || { echo "缺少 .nojekyll：Jekyll 会处理 content/*.md，导致线上 fetch 取不到原始 Markdown"; exit 1; }
           test -f index.html || { echo "缺少 index.html"; exit 1; }
           test -d content/chapters || { echo "缺少章节目录"; exit 1; }
+          # 用户名单缺失会导致 window.USER_DIRECTORY 为 undefined，任何人都无法登录
+          test -f content/users.js || { echo "缺少 content/users.js：没有它就无法生成登录校验，所有人都进不来"; exit 1; }
 
       # 纯静态站点，无需构建步骤，直接上传仓库根目录
       - name: Upload artifact

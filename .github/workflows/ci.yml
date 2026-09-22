@@ -37,7 +37,7 @@ jobs:
       - name: JS 语法检查
         run: |
           fail=0
-          for f in assets/js/*.js scripts/*.mjs content/catalog.js; do
+          for f in assets/js/*.js scripts/*.mjs content/*.js; do
             if out=$(node --check "$f" 2>&1); then
               echo "  ✓ $f"
             else
@@ -81,8 +81,12 @@ jobs:
           }
           check /index.html
           check /assets/css/main.css
+          check /assets/css/auth.css
           check /assets/js/app.js
+          check /assets/js/auth.js
+          check /assets/js/crypto.js
           check /content/catalog.js
+          check /content/users.js
           check /content/chapters/c01.md
           check /content/chapters/c21.md
 
@@ -93,9 +97,11 @@ jobs:
             text/html*) echo "  ✗ Markdown 被当作 HTML 返回（请检查 .nojekyll）"; exit 1 ;;
           esac
 
-          # 首页必须包含脚本依赖的挂载点
+          # 首页必须包含脚本依赖的挂载点（含登录门禁与用户管理面板）
           page=$(curl -s "$BASE/index.html")
-          for id in viewRoot chapterNav tocInner searchInput drawerBody selectionBar toastWrap; do
+          for id in viewRoot chapterNav tocInner searchInput drawerBody selectionBar toastWrap \
+                    authGate loginForm loginUser loginPass loginSubmit loginError \
+                    userBtn userAvatar userMenu adminOverlay adminBody accountOverlay accountBody; do
             echo "$page" | grep -q "id=\"$id\"" || { echo "  ✗ index.html 缺少挂载点 #$id"; exit 1; }
           done
           echo "  ✓ 关键挂载点齐备"

@@ -6,7 +6,7 @@
    ============================================================ */
 
 window.CHANGELOG = {
-  current: '1.4.0',
+  current: '1.5.0',
 
   /* 条目类型 → 展示文案与配色（样式见 components.css 的 .cl-tag.*） */
   types: {
@@ -15,10 +15,30 @@ window.CHANGELOG = {
     content: { label: '内容', cls: 't-content' },
     perf: { label: '优化', cls: 't-perf' },
     chore: { label: '工程', cls: 't-chore' },
-    doc: { label: '文档', cls: 't-doc' }
+    doc: { label: '文档', cls: 't-doc' },
+    security: { label: '安全', cls: 't-fix' }
   },
 
   entries: [
+    {
+      version: '1.5.0',
+      date: '2026-09-20',
+      level: 'minor',
+      title: '新增登录门禁与用户体系，学习数据按账号隔离',
+      items: [
+        { type: 'feat', text: '新增登录门禁：未登录时页面不渲染任何学习内容，顶栏、侧边栏、章节树整体隐藏，搜索索引也不会建立' },
+        { type: 'feat', text: '新增用户管理后台：注册用户、启停账号、调整角色、重置密码、删除账号，并展示角色与状态标签' },
+        { type: 'feat', text: '学习进度、笔记、书签与标注改为按账号隔离存储（键名 `agent-learning-platform:u:<用户名>:v1`），并提供「启用账号功能之前」的本机旧数据迁移' },
+        { type: 'feat', text: '新增账号设置：修改显示名与备注、自助修改密码（需校验原密码）、查看会话有效期' },
+        { type: 'feat', text: '新增命令行用户管理工具：`npm run user -- list / add / passwd / disable / enable / role / remove / hash`，适合忘记密码或批量开号' },
+        { type: 'security', text: '密码采用加盐迭代哈希（迭代式 SHA-256，默认 1000 轮，每用户独立随机盐），全程不保存明文；登录失败与用户不存在的耗时保持一致，避免探测账号是否存在' },
+        { type: 'security', text: '登录页与用户管理页固定展示安全边界说明：纯静态站点没有服务端，登录属于访问控制而非安全防护，请勿使用真实密码' },
+        { type: 'chore', text: 'CI 新增密码算法锁定检查（SHA-256 标准向量 + 迭代哈希 KAT），算法被误改动会让所有已存在密码失效，必须在合并前拦住' },
+        { type: 'chore', text: 'CI 新增用户目录校验：登录名合法且唯一、凭据为 64 位十六进制、必须存在启用的管理员、禁止出现明文字段' },
+        { type: 'chore', text: '交互回归测试新增 3 组场景共 26 项断言：登录门禁与错误密码、用户管理后台、多账号数据隔离' },
+        { type: 'chore', text: '用户目录序列化逻辑抽到 assets/js/userdir.js，浏览器管理界面与命令行工具共用同一份实现，避免导出格式漂移' }
+      ]
+    },
     {
       version: '1.4.0',
       date: '2026-09-20',
