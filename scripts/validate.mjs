@@ -181,7 +181,11 @@ for (const c of chapters) {
   const file = `${CH_DIR}/${c.id}.md`;
   if (!fileSet.has(c.id)) continue;
   const scope = c.id;
-  const md = readFileSync(P(file), 'utf8');
+  // 统一换行符：Windows 检出是 CRLF，下面的行级正则里有 `(.*)$`，
+  // 而 `.` 不匹配 \r、`$` 又要求字符串结尾 —— 不归一化的话，
+  // 整个逐行容器扫描（:::demo / :::diagram / :::callout 名称校验）
+  // 在 Windows 上会静默失效，只在 Linux CI 上生效。
+  const md = readFileSync(P(file), 'utf8').replace(/\r\n?/g, '\n');
   const lines = md.split('\n');
 
   /* 4.1 一级标题 */
@@ -263,15 +267,17 @@ for (const c of chapters) {
      历史问题：渲染器只认 :::<类型>，而文档与所有章节用的是 :::callout <类型>，
      于是提示框整体退化成普通段落、标题被静默丢弃 —— 页面上看不出报错，
      只是样式没了。这里用「数量一致 + 标题不丢」把它钉死。 */
-  // 非捕获组：下面要用 (.+) 捕获标题，类型分组不能占用 m[1]
-  const CALLOUT_TYPES = '(?:tip|info|warn|danger|key|quote)';
-  const expectCallouts = (md.match(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_TYPES}\\b`, 'gm')) || []).length;
+  // 注意：这里不能再用 CALLOUT_TYPES 这个名字 —— 上面的逐行扫描已经有一个
+  // 同名的模块级常量，在本作用域再声明一次会遮蔽它，导致那个引用落在暂时性
+  // 死区里（Cannot access before initialization）。
+  const CALLOUT_RE = '(?:tip|info|warn|danger|key|quote)';
+  const expectCallouts = (md.match(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_RE}\\b`, 'gm')) || []).length;
   const gotCallouts = (html.match(/class="callout [a-z]+"/g) || []).length;
   if (expectCallouts !== gotCallouts) {
     fail(scope, `提示框渲染数量不一致：源文件 ${expectCallouts} 处，只渲染出 ${gotCallouts} 个容器。`
       + '通常意味着渲染器不认识该写法，提示框会退化成普通段落');
   }
-  for (const m of md.matchAll(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_TYPES}\\s+(.+)$`, 'gm'))) {
+  for (const m of md.matchAll(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_RE}\\s+(.+)$`, 'gm'))) {
     const title = m[1].trim();
     // 标题里含行内标记的（粗体/代码）不做纯文本比对，避免误报
     if (!title || /[*`_[\]\\]/.test(title)) continue;
