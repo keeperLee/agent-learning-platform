@@ -4,6 +4,7 @@
 
 import * as store from './store.js';
 import * as auth from './auth.js';
+import { ACCESS } from './access.js';
 import { $, $$, esc, toast, throttle, copyText } from './ui.js';
 import { renderMarkdown } from './markdown.js';
 import { mountDemos } from './demos.js';
@@ -812,34 +813,8 @@ function bindGlobalEvents(annotate, search) {
 /* ============================================================
    启动
    ============================================================ */
-async function boot() {
-  /* ---------- 认证必须先于一切渲染 ----------
-     未登录时不渲染任何学习内容、不建立搜索索引、不绑定应用事件。
-     界面上只是一张登录卡片，DOM 里没有任何章节信息。 */
-  try { await auth.initialize(); } catch (error) {
-    initLogin().showGate();
-    document.querySelector('#loginError').textContent=error.message;
-    document.querySelector('#loginError').hidden=false;
-    document.querySelector('#loginSubmit').disabled=true;
-    return;
-  }
-  auth.syncIfClean();     // 本机改动若已与仓库一致就丢弃覆盖层，避免长期遮蔽
-
-  const login = initLogin({ onOpenAdmin: openAdmin });
-  initAdmin();
-
-  const user = auth.currentUser();
-  if (!user) {
-    location.replace(`./?next=${encodeURIComponent(location.pathname + location.hash)}`);
-    return;
-  }
-
-  // 学习数据按账号隔离，必须在读取任何进度之前切好命名空间
-  store.setNamespace(auth.namespaceOf(user));
-
-  dismissBoot();
-  login.refreshUserMenu();
-
+/** 启动阅读应用本体（与「要不要登录」无关） */
+function startApp() {
   store.applyTheme();
   applyReader();          // 阅读设置要在首次渲染前生效，避免闪一下默认字号
   renderPathSwitch();
@@ -877,6 +852,49 @@ async function boot() {
   else setTimeout(warm, 2500);
 
   console.log(`%c Agent 学习平台 v${CAT.version} `, 'background:#5b5bd6;color:#fff;border-radius:3px;padding:2px 6px', `共 ${CAT.allChapters.length} 章`);
+}
+
+async function boot() {
+  /* ---------- 公开访问：直接放行 ----------
+     见 assets/js/access.js。静态托管没有服务端，也就没有账号服务，
+     请求 /api/session 只会失败并把所有人挡在门外。 */
+  if (ACCESS.open) {
+    document.documentElement.classList.add('open-access');
+    if (!ACCESS.showAccountUI) document.documentElement.classList.add('no-account-ui');
+    // 匿名访客的学习数据仍走命名空间隔离，只是不再区分账号
+    store.setNamespace(auth.namespaceOf(null));
+    dismissBoot();
+    startApp();
+    return;
+  }
+
+  /* ---------- 登录门禁：认证必须先于一切渲染 ----------
+     未登录时不渲染任何学习内容、不建立搜索索引、不绑定应用事件。
+     界面上只是一张登录卡片，DOM 里没有任何章节信息。 */
+  try { await auth.initialize(); } catch (error) {
+    initLogin().showGate();
+    document.querySelector('#loginError').textContent=error.message;
+    document.querySelector('#loginError').hidden=false;
+    document.querySelector('#loginSubmit').disabled=true;
+    return;
+  }
+  auth.syncIfClean();     // 本机改动若已与仓库一致就丢弃覆盖层，避免长期遮蔽
+
+  const login = initLogin({ onOpenAdmin: openAdmin });
+  initAdmin();
+
+  const user = auth.currentUser();
+  if (!user) {
+    location.replace(`./?next=${encodeURIComponent(location.pathname + location.hash)}`);
+    return;
+  }
+
+  // 学习数据按账号隔离，必须在读取任何进度之前切好命名空间
+  store.setNamespace(auth.namespaceOf(user));
+
+  dismissBoot();
+  login.refreshUserMenu();
+  startApp();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

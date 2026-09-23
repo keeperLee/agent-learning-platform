@@ -102,6 +102,29 @@ node scripts/serve.mjs 8080 # 指定端口
 
 ---
 
+## 访问模式（公开访问 / 登录门禁）
+
+`assets/js/access.js` 是决定「要不要登录」的**唯一开关**：
+
+| 设置 | 行为 | 适用场景 |
+| --- | --- | --- |
+| `open: true`（当前） | 不校验登录，任何人打开即可阅读全部课程；启动时不请求 `/api/session` | GitHub Pages 等纯静态托管 |
+| `open: false` | 恢复登录门禁，启动时向账号服务校验会话 | 自建 Node 服务器 |
+
+公开访问模式下：
+
+- 右上角账号入口自动隐藏，不会出现「点了没反应」的按钮
+- 学习数据仍走命名空间隔离，匿名访客使用 `agent-learning-platform:public:v1`
+- `scripts/serve.mjs` 的三处门禁（`/projects/*`、`content/projects.js`、`content/chapters/*`）一并放行
+
+> 本项目作为 [ai-space](https://github.com/keeperLee/ai-space) 门户的子项目发布时，
+> **门户仓库里有一份同名副本** `ai-space/assets/js/access.js`，两边需要一起改，
+> 否则会出现「门户放开了但学习项目还在拦」。
+
+账号体系、用户管理、scrypt 哈希全部完整保留，把 `open` 改回 `false` 即可恢复登录门禁（下面这一节描述的就是该模式）。
+
+---
+
 ## 账号与登录
 
 需要 Node.js >= 22.13。执行 `npm run dev`，访问门户首页，首次设置 `admin` 密码并确认。门户登录后，同一站点下的学习平台和 `projects/` 子项目共用会话；未登录直接访问子项目会返回门户。外部域名的独立项目需要另行接入单点登录，不能自动共享 Cookie。初始数据库仅包含密码为 NULL 的 admin，不能以空密码登录。初始化成功后接口关闭，不能再次覆盖管理员。
@@ -316,6 +339,7 @@ GitHub Pages 只能托管静态页面，不能运行本项目的数据库认证�
 | 键名 | 内容 |
 | --- | --- |
 | `agent-learning-platform:u:<登录名>:v1` | 该账号的进度、笔记、书签、高亮、阅读设置 |
+| `agent-learning-platform:public:v1` | 公开访问模式下匿名访客的数据 |
 | `agent-learning-platform:v1` | 早期版本（无账号功能）的全局数据，会被一次性迁移 |
 
 - **不上传任何服务器**，纯本地；换浏览器或清理浏览器数据会丢失。
