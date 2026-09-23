@@ -197,10 +197,25 @@ export function renderMarkdown(src) {
         out.push(`<div class="fig-grid">${parts}</div>`);
         continue;
       }
-      if (CALLOUT_META[type]) {
-        const meta = CALLOUT_META[type];
-        const title = rest || meta.title;
-        out.push(`<div class="callout ${type}">
+      /* 提示框支持两种写法：
+           :::callout <类型> [标题]    ← README 与全部课程章节使用这一种
+           :::<类型> [标题]            ← 直接写类型
+
+         注意：只支持其中一种，另一种会整体退化成普通段落，而且
+         `rest`（标题）会被静默丢弃 —— 页面上看不出错，只是提示框
+         变成一段普通文字。scripts/validate.mjs 里有对应的一致性检查。 */
+      let calloutType = type;
+      let calloutTitle = rest;
+      if (type === 'callout') {
+        const m = rest.match(/^(\S+)\s*(.*)$/);
+        calloutType = (m ? m[1] : '').toLowerCase();
+        calloutTitle = m ? m[2].trim() : '';
+      }
+
+      if (CALLOUT_META[calloutType]) {
+        const meta = CALLOUT_META[calloutType];
+        const title = calloutTitle || meta.title;
+        out.push(`<div class="callout ${calloutType}">
   <span class="co-icon" aria-hidden="true">${meta.icon}</span>
   <div class="co-body">${title ? `<div class="co-title">${inline(title)}</div>` : ''}${renderMarkdown(inner).html}</div>
 </div>`);

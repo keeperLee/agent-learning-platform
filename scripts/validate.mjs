@@ -75,6 +75,7 @@ const { DEMOS } = await import(pathToFileURL(P('assets/js/demos.js')).href);
 const { DIAGRAM_NAMES } = await import(pathToFileURL(P('assets/js/diagrams.js')).href);
 const { sha256Hex, hashPassword } = await import(pathToFileURL(P('assets/js/crypto.js')).href);
 const { serializeDirectory } = await import(pathToFileURL(P('assets/js/userdir.js')).href);
+const { esc } = await import(pathToFileURL(P('assets/js/ui.js')).href);
 
 const DEMO_NAMES = new Set(Object.keys(DEMOS));
 const DIAGRAM_SET = new Set(DIAGRAM_NAMES);
@@ -257,6 +258,26 @@ for (const c of chapters) {
 
   if (/:::\s*[a-zA-Z]/.test(html)) fail(scope, '渲染结果中残留 ::: 容器标记');
   if (html.includes('<p>:::</p>')) fail(scope, '渲染结果中出现游离的 ::: 段落');
+
+  /* 4.5.1 提示框必须真的渲染成容器
+     历史问题：渲染器只认 :::<类型>，而文档与所有章节用的是 :::callout <类型>，
+     于是提示框整体退化成普通段落、标题被静默丢弃 —— 页面上看不出报错，
+     只是样式没了。这里用「数量一致 + 标题不丢」把它钉死。 */
+  // 非捕获组：下面要用 (.+) 捕获标题，类型分组不能占用 m[1]
+  const CALLOUT_TYPES = '(?:tip|info|warn|danger|key|quote)';
+  const expectCallouts = (md.match(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_TYPES}\\b`, 'gm')) || []).length;
+  const gotCallouts = (html.match(/class="callout [a-z]+"/g) || []).length;
+  if (expectCallouts !== gotCallouts) {
+    fail(scope, `提示框渲染数量不一致：源文件 ${expectCallouts} 处，只渲染出 ${gotCallouts} 个容器。`
+      + '通常意味着渲染器不认识该写法，提示框会退化成普通段落');
+  }
+  for (const m of md.matchAll(new RegExp(`^:::(?:callout\\s+)?${CALLOUT_TYPES}\\s+(.+)$`, 'gm'))) {
+    const title = m[1].trim();
+    // 标题里含行内标记的（粗体/代码）不做纯文本比对，避免误报
+    if (!title || /[*`_[\]\\]/.test(title)) continue;
+    // 标题渲染时会经过 HTML 转义（例如 " 会变成 &quot;），比对前先转义
+    if (!html.includes(esc(title))) fail(scope, `提示框标题「${title}」在渲染结果中丢失`);
+  }
   if (html.includes('缺少示意图')) fail(scope, '渲染结果中包含「缺少示意图」占位');
   if (html.includes('```')) fail(scope, '渲染结果中残留代码围栏');
   if (/<p>[^<]*\*\*/.test(html)) fail(scope, '渲染结果中残留未解析的 ** 粗体标记');
